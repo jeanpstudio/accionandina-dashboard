@@ -559,7 +559,7 @@ export default function HomeDashboard() {
         {/* GRID PRINCIPAL */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-auto lg:h-[500px]">
           {/* 1. AGENDA */}
-          <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
+          <div className="bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
             <div className="flex justify-between items-center mb-6 z-10">
               <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                 <Calendar className="text-brand" size={20} /> Agenda Mensual
@@ -693,7 +693,7 @@ export default function HomeDashboard() {
           </div>
 
           {/* 3. AUDITORÍA */}
-          <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
+          <div className="bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
             <div className="flex justify-between items-center mb-6 z-10">
               <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                 <AlertTriangle className="text-red-500" size={20} /> Auditoría
