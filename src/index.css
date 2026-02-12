@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  /* 👇 PALETA: "Deep Highland Forest" */
+  
+  /* BRAND: Verde Bosque Oscuro (#0a1f14)
+     Es profundo, serio y con un toque militar pero más oscuro. */
+  --color-brand: #0a1f14; 
+  
+  /* BRAND LIGHT: Hover (#143322)
+     Sigue siendo oscuro pero lo suficiente para notar la selección. */
+  --color-brand-light: #143322;
+  
+  /* ACCENT: Rojo Acción Andina */
+  --color-accent: #da2316;
+  
+  /* ACCENT HOVER */
+  --color-accent-hover: #b01b11;
+}
