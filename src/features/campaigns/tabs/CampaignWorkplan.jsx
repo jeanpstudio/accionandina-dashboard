@@ -361,23 +361,23 @@ export default function CampaignWorkplan({
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4">
       {/* HEADER: FECHAS GLOBALES */}
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center">
-        <div className="flex gap-8">
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 w-full sm:w-auto">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center sm:text-left">
               Inicio Campaña
             </p>
             <input
               disabled={isReadOnly}
               type="date"
-              className="bg-transparent text-lg font-black text-gray-900 outline-none"
+              className="bg-transparent text-lg font-black text-gray-900 outline-none w-full sm:w-auto text-center sm:text-left"
               value={formData.start_date}
               onChange={(e) => liveUpdate("start_date", e.target.value)}
             />
           </div>
-          <div className="w-px bg-gray-200 h-10 self-center"></div>
+          <div className="hidden sm:block w-px bg-gray-200 h-10 self-center"></div>
           <div className="space-y-1">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center sm:text-left">
               Cierre Campaña
             </p>
             <input
@@ -393,23 +393,23 @@ export default function CampaignWorkplan({
 
       {/* FASES */}
       <div>
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">
             Plan de Trabajo
           </h3>
           {!isReadOnly && (
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
               <input
                 type="text"
                 placeholder="Nombre de Fase..."
-                className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-sm font-bold outline-none w-72 focus:border-brand shadow-sm"
+                className="bg-white border border-gray-200 px-4 py-3 rounded-xl text-sm font-bold outline-none w-full sm:w-72 focus:border-brand shadow-sm"
                 value={newPhaseName}
                 onChange={(e) => setNewPhaseName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addPhase()}
               />
               <button
                 onClick={addPhase}
-                className="bg-gray-900 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-black uppercase tracking-wider shadow-lg transition-all"
+                className="bg-gray-900 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-black uppercase tracking-wider shadow-lg transition-all whitespace-nowrap"
               >
                 + Fase
               </button>
@@ -437,13 +437,13 @@ export default function CampaignWorkplan({
                 onDragOver={(e) => !isReadOnly && e.preventDefault()}
                 onDrop={(e) => handleDropTaskToPhase(e, phase.id)}
               >
-                <div className="bg-gray-50/80 p-5 flex justify-between items-center border-b border-gray-100">
-                  <div className="flex items-center gap-3 flex-1">
-                    <CalendarDays size={20} className="text-brand" />
+                <div className="bg-gray-50/80 p-4 md:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 gap-4">
+                  <div className="flex items-center gap-3 flex-1 w-full text-left">
+                    <CalendarDays size={20} className="text-brand shrink-0" />
                     <input
                       disabled={isReadOnly}
                       type="text"
-                      className="bg-transparent border-none outline-none font-black text-lg text-gray-900 uppercase w-full p-0 tracking-tight"
+                      className="bg-transparent border-none outline-none font-black text-base md:text-lg text-gray-900 uppercase w-full p-0 tracking-tight"
                       value={phase.name}
                       onChange={(e) => {
                         const newPhases = formData.phases.map((p) =>
@@ -506,23 +506,23 @@ export default function CampaignWorkplan({
                             ? task.platform
                             : [task.platform]
                           ).filter(Boolean).length > 0 && (
-                            <div className="flex items-center gap-1 ml-1 border-l border-gray-200 pl-2">
-                              {(Array.isArray(task.platform)
-                                ? task.platform
-                                : [task.platform]
-                              )
-                                .filter(Boolean)
-                                .slice(0, 3)
-                                .map((p) => (
-                                  <span
-                                    key={p}
-                                    className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded uppercase"
-                                  >
-                                    {p}
-                                  </span>
-                                ))}
-                            </div>
-                          )}
+                              <div className="flex items-center gap-1 ml-1 border-l border-gray-200 pl-2">
+                                {(Array.isArray(task.platform)
+                                  ? task.platform
+                                  : [task.platform]
+                                )
+                                  .filter(Boolean)
+                                  .slice(0, 3)
+                                  .map((p) => (
+                                    <span
+                                      key={p}
+                                      className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded uppercase"
+                                    >
+                                      {p}
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {task.status === "CHANGES_REQUESTED" && (
@@ -633,8 +633,8 @@ export default function CampaignWorkplan({
 
       {/* --- MODAL EDICIÓN MEJORADO --- */}
       {editingTask && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in zoom-in-95">
-          <div className="bg-white rounded-[40px] shadow-2xl p-8 max-w-7xl w-full h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[60] flex items-center justify-center p-4 md:p-6 animate-in zoom-in-95">
+          <div className="bg-white rounded-[32px] md:rounded-[40px] shadow-2xl p-4 md:p-8 max-w-7xl w-full h-full sm:h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex justify-between items-center mb-6 shrink-0 border-b border-gray-100 pb-4">
               <div className="flex items-center gap-4">
@@ -692,148 +692,148 @@ export default function CampaignWorkplan({
                 {/* A. VISTA "CONTENT" (Social Media) */}
                 {(!editingTask.task_type ||
                   editingTask.task_type === "CONTENT") && (
-                  <div className="flex flex-col h-full gap-6">
-                    {/* ... (Contenido Social Media igual al anterior) ... */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase">
-                          Plataformas
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {[
-                            "Instagram",
-                            "Facebook",
-                            "TikTok",
-                            "Linkedin",
-                            "Youtube",
-                            "Twitter",
-                          ].map((p) => {
-                            const platforms = Array.isArray(
-                              editingTask.platform,
-                            )
-                              ? editingTask.platform
-                              : editingTask.platform
-                                ? [editingTask.platform]
-                                : [];
-                            const isSelected = platforms.includes(p);
-                            return (
-                              <button
-                                key={p}
-                                disabled={isReadOnly}
-                                onClick={() => togglePlatform(p)}
-                                className={`p-2 rounded-lg border-2 transition-all flex items-center justify-center ${isSelected ? "border-brand bg-brand/5 text-brand" : "border-gray-100 text-gray-400 hover:bg-gray-50"}`}
-                              >
-                                {p === "Instagram" && <Instagram size={18} />}
-                                {p === "Facebook" && <Facebook size={18} />}
-                                {p === "Linkedin" && <Briefcase size={18} />}
-                                {p === "TikTok" && <Video size={18} />}
-                                {p === "Youtube" && <Youtube size={18} />}
-                                {p === "Twitter" && <ExternalLink size={18} />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase">
-                          Formato
-                        </label>
-                        <select
-                          disabled={isReadOnly}
-                          className="w-full bg-gray-50 p-3.5 rounded-xl text-sm font-bold outline-none border-r-[12px] border-transparent"
-                          value={editingTask.format}
-                          onChange={(e) =>
-                            updateEditingTask("format", e.target.value)
-                          }
-                        >
-                          <option value="">Seleccionar...</option>
-                          <optgroup label="Video">
-                            <option value="Video 9:16 (Reel/TikTok)">
-                              Video 9:16 (Reel/TikTok)
-                            </option>
-                            <option value="Video 16:9 (YouTube)">
-                              Video 16:9 (YouTube)
-                            </option>
-                            <option value="Video 1:1 (Cuadrado)">
-                              Video 1:1 (Cuadrado)
-                            </option>
-                          </optgroup>
-                          <optgroup label="Imagen">
-                            <option value="Post 1:1">
-                              Post 1:1 (Cuadrado)
-                            </option>
-                            <option value="Post 4:5">Post 4:5 (Retrato)</option>
-                            <option value="Story 9:16">Story 9:16</option>
-                            <option value="Carrusel">
-                              Carrusel (Múltiple)
-                            </option>
-                          </optgroup>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-6 flex-1 min-h-[300px]">
-                      <div className="flex flex-col gap-4">
-                        <div className="space-y-2 flex-1 flex flex-col">
+                    <div className="flex flex-col h-full gap-6">
+                      {/* ... (Contenido Social Media igual al anterior) ... */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
                           <label className="text-xs font-bold text-gray-500 uppercase">
-                            Copy / Texto
+                            Plataformas
                           </label>
-                          <textarea
-                            disabled={isReadOnly}
-                            className="flex-1 w-full bg-white border border-gray-200 p-4 rounded-2xl text-sm font-medium outline-none resize-none focus:border-brand transition-all"
-                            placeholder="Escribe el copy aquí..."
-                            value={editingTask.copy || ""}
-                            onChange={(e) =>
-                              updateEditingTask("copy", e.target.value)
-                            }
-                          ></textarea>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              "Instagram",
+                              "Facebook",
+                              "TikTok",
+                              "Linkedin",
+                              "Youtube",
+                              "Twitter",
+                            ].map((p) => {
+                              const platforms = Array.isArray(
+                                editingTask.platform,
+                              )
+                                ? editingTask.platform
+                                : editingTask.platform
+                                  ? [editingTask.platform]
+                                  : [];
+                              const isSelected = platforms.includes(p);
+                              return (
+                                <button
+                                  key={p}
+                                  disabled={isReadOnly}
+                                  onClick={() => togglePlatform(p)}
+                                  className={`p-2 rounded-lg border-2 transition-all flex items-center justify-center ${isSelected ? "border-brand bg-brand/5 text-brand" : "border-gray-100 text-gray-400 hover:bg-gray-50"}`}
+                                >
+                                  {p === "Instagram" && <Instagram size={18} />}
+                                  {p === "Facebook" && <Facebook size={18} />}
+                                  {p === "Linkedin" && <Briefcase size={18} />}
+                                  {p === "TikTok" && <Video size={18} />}
+                                  {p === "Youtube" && <Youtube size={18} />}
+                                  {p === "Twitter" && <ExternalLink size={18} />}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="space-y-2 flex-1 flex flex-col">
-                          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                            <Camera size={14} /> Tomas Recomendadas
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-gray-500 uppercase">
+                            Formato
                           </label>
-                          <textarea
+                          <select
                             disabled={isReadOnly}
-                            className="flex-1 w-full bg-white border border-gray-200 p-4 rounded-2xl text-sm font-medium outline-none resize-none focus:border-brand transition-all"
-                            placeholder="Describe planos, ángulos o ideas visuales..."
-                            value={editingTask.shots || ""}
+                            className="w-full bg-gray-50 p-3.5 rounded-xl text-sm font-bold outline-none border-r-[12px] border-transparent"
+                            value={editingTask.format}
                             onChange={(e) =>
-                              updateEditingTask("shots", e.target.value)
+                              updateEditingTask("format", e.target.value)
                             }
-                          ></textarea>
+                          >
+                            <option value="">Seleccionar...</option>
+                            <optgroup label="Video">
+                              <option value="Video 9:16 (Reel/TikTok)">
+                                Video 9:16 (Reel/TikTok)
+                              </option>
+                              <option value="Video 16:9 (YouTube)">
+                                Video 16:9 (YouTube)
+                              </option>
+                              <option value="Video 1:1 (Cuadrado)">
+                                Video 1:1 (Cuadrado)
+                              </option>
+                            </optgroup>
+                            <optgroup label="Imagen">
+                              <option value="Post 1:1">
+                                Post 1:1 (Cuadrado)
+                              </option>
+                              <option value="Post 4:5">Post 4:5 (Retrato)</option>
+                              <option value="Story 9:16">Story 9:16</option>
+                              <option value="Carrusel">
+                                Carrusel (Múltiple)
+                              </option>
+                            </optgroup>
+                          </select>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                          <ImageIcon size={14} /> Multimedia
-                        </label>
-                        <UnifiedMediaInput
-                          url={editingTask.assets_url}
-                          onChange={(v) => updateEditingTask("assets_url", v)}
-                          placeholder="Subir archivo o pegar link..."
-                          isReadOnly={isReadOnly}
-                          icon={ImageIcon}
-                        />
-                        <div className="flex-1 bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden relative shadow-inner flex items-center justify-center mt-2 min-h-[250px]">
-                          {getPreviewContent(editingTask.assets_url)}
+                      <div className="grid grid-cols-2 gap-6 flex-1 min-h-[300px]">
+                        <div className="flex flex-col gap-4">
+                          <div className="space-y-2 flex-1 flex flex-col">
+                            <label className="text-xs font-bold text-gray-500 uppercase">
+                              Copy / Texto
+                            </label>
+                            <textarea
+                              disabled={isReadOnly}
+                              className="flex-1 w-full bg-white border border-gray-200 p-4 rounded-2xl text-sm font-medium outline-none resize-none focus:border-brand transition-all"
+                              placeholder="Escribe el copy aquí..."
+                              value={editingTask.copy || ""}
+                              onChange={(e) =>
+                                updateEditingTask("copy", e.target.value)
+                              }
+                            ></textarea>
+                          </div>
+                          <div className="space-y-2 flex-1 flex flex-col">
+                            <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                              <Camera size={14} /> Tomas Recomendadas
+                            </label>
+                            <textarea
+                              disabled={isReadOnly}
+                              className="flex-1 w-full bg-white border border-gray-200 p-4 rounded-2xl text-sm font-medium outline-none resize-none focus:border-brand transition-all"
+                              placeholder="Describe planos, ángulos o ideas visuales..."
+                              value={editingTask.shots || ""}
+                              onChange={(e) =>
+                                updateEditingTask("shots", e.target.value)
+                              }
+                            ></textarea>
+                          </div>
                         </div>
-                        <div className="space-y-1 pt-2">
-                          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                            <Hash size={14} /> Hashtags
+                        <div className="flex flex-col gap-2">
+                          <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                            <ImageIcon size={14} /> Multimedia
                           </label>
-                          <input
-                            disabled={isReadOnly}
-                            type="text"
-                            className="w-full bg-white border border-gray-200 p-3 rounded-xl text-sm text-blue-600 font-bold outline-none focus:border-brand"
-                            value={editingTask.hashtags || ""}
-                            onChange={(e) =>
-                              updateEditingTask("hashtags", e.target.value)
-                            }
+                          <UnifiedMediaInput
+                            url={editingTask.assets_url}
+                            onChange={(v) => updateEditingTask("assets_url", v)}
+                            placeholder="Subir archivo o pegar link..."
+                            isReadOnly={isReadOnly}
+                            icon={ImageIcon}
                           />
+                          <div className="flex-1 bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden relative shadow-inner flex items-center justify-center mt-2 min-h-[250px]">
+                            {getPreviewContent(editingTask.assets_url)}
+                          </div>
+                          <div className="space-y-1 pt-2">
+                            <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                              <Hash size={14} /> Hashtags
+                            </label>
+                            <input
+                              disabled={isReadOnly}
+                              type="text"
+                              className="w-full bg-white border border-gray-200 p-3 rounded-xl text-sm text-blue-600 font-bold outline-none focus:border-brand"
+                              value={editingTask.hashtags || ""}
+                              onChange={(e) =>
+                                updateEditingTask("hashtags", e.target.value)
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* B. VISTA "REVIEW" */}
                 {editingTask.task_type === "REVIEW" && (
@@ -881,19 +881,19 @@ export default function CampaignWorkplan({
                         {/* MODO TEXTO SIMPLE */}
                         {(!editingTask.instruction_mode ||
                           editingTask.instruction_mode === "SIMPLE") && (
-                          <textarea
-                            disabled={isReadOnly}
-                            className="w-full h-full p-6 outline-none text-sm font-medium resize-none leading-relaxed"
-                            placeholder="Escribe las indicaciones aquí..."
-                            value={editingTask.delivery_notes || ""}
-                            onChange={(e) =>
-                              updateEditingTask(
-                                "delivery_notes",
-                                e.target.value,
-                              )
-                            }
-                          ></textarea>
-                        )}
+                            <textarea
+                              disabled={isReadOnly}
+                              className="w-full h-full p-6 outline-none text-sm font-medium resize-none leading-relaxed"
+                              placeholder="Escribe las indicaciones aquí..."
+                              value={editingTask.delivery_notes || ""}
+                              onChange={(e) =>
+                                updateEditingTask(
+                                  "delivery_notes",
+                                  e.target.value,
+                                )
+                              }
+                            ></textarea>
+                          )}
 
                         {/* MODO GUION (RICH TEXT) */}
                         {editingTask.instruction_mode === "SCRIPT" && (

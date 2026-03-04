@@ -444,7 +444,7 @@ export default function UserAdmin() {
                     Acceso Global Habilitado
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {projects.map((proj) => {
                       const hasAccess = accessMap[user.id]?.includes(proj.id);
                       return (
@@ -481,8 +481,8 @@ export default function UserAdmin() {
 
       {/* MODAL CREAR USUARIO */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl relative">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 md:p-8 rounded-3xl w-full max-w-sm shadow-2xl relative">
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-red-500"

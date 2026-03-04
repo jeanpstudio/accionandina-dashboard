@@ -529,22 +529,22 @@ export default function HomeDashboard() {
               )}
             </p>
           </div>
-          <div className="bg-white p-4 md:p-6 rounded-[32px] border border-gray-100 shadow-sm flex justify-between items-center relative overflow-hidden">
+          <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm flex flex-col sm:flex-row justify-around items-center relative overflow-hidden gap-4">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
               <TrendingUp size={80} />
             </div>
             <div className="text-center z-10">
-              <span className="block text-2xl md:text-3xl font-black text-brand">
+              <span className="block text-3xl font-black text-brand">
                 {stats.videoProd}
               </span>
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                 Videos Totales
               </span>
             </div>
-            <div className="h-10 w-px bg-gray-100 mx-4"></div>
-            <div className="text-center z-10">
+            <div className="hidden sm:block h-10 w-px bg-gray-100 mx-4"></div>
+            <div className="text-center z-10 border-t sm:border-t-0 border-gray-50 pt-4 sm:pt-0 w-full sm:w-auto">
               <div className="flex items-center justify-center gap-1">
-                <span className="block text-2xl md:text-3xl font-black text-gray-900">
+                <span className="block text-3xl font-black text-gray-900">
                   {stats.globalExecution}%
                 </span>
                 <TrendingUp size={16} className="text-emerald-500 mb-1" />

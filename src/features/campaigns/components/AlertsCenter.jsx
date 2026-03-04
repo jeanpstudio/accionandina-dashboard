@@ -206,7 +206,7 @@ export default function AlertsCenter({ campaigns, partners }) {
         createPortal(
           <div
             id="alerts-dropdown-portal"
-            className="fixed top-20 right-10 w-[380px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[9999] overflow-hidden animate-in fade-in slide-in-from-top-2 origin-top-right ring-1 ring-black/5"
+            className="fixed top-20 right-4 sm:right-10 w-[calc(100%-2rem)] sm:w-[380px] bg-white rounded-2xl shadow-2xl border border-gray-100 z-[9999] overflow-hidden animate-in fade-in slide-in-from-top-2 origin-top-right ring-1 ring-black/5"
           >
             <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 backdrop-blur-sm sticky top-0 z-10">
               <div>

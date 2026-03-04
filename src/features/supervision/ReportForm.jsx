@@ -254,7 +254,7 @@ export default function ReportForm() {
     );
 
   return (
-    <div className="max-w-[1500px] mx-auto p-6 bg-gray-50/20 min-h-screen font-sans">
+    <div className="max-w-[1500px] mx-auto p-4 md:p-6 bg-gray-50/20 min-h-screen font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <button
@@ -263,11 +263,11 @@ export default function ReportForm() {
           >
             <ArrowLeft size={16} /> Regresar
           </button>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
             {isEditing ? <Edit className="text-brand" size={32} /> : null}
             {isEditing ? "Editar Reporte" : "Nuevo Reporte"}
           </h1>
-          <p className="text-brand font-bold text-lg mt-1 italic">
+          <p className="text-brand font-bold text-sm md:text-lg mt-1 italic">
             {project?.partners?.name} / {project?.name}
           </p>
         </div>
@@ -287,7 +287,7 @@ export default function ReportForm() {
       >
         {/* COLUMNA 1 */}
         <div className="space-y-8">
-          <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
               <Calendar size={14} /> Periodo
             </p>
@@ -341,11 +341,10 @@ export default function ReportForm() {
             <div className="flex gap-3 pt-2">
               <label className="cursor-pointer flex-1">
                 <div
-                  className={`py-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${
-                    formData.is_season_start
-                      ? "bg-brand border-brand text-white shadow-md"
-                      : "bg-transparent border-gray-100 text-gray-400"
-                  }`}
+                  className={`py-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${formData.is_season_start
+                    ? "bg-brand border-brand text-white shadow-md"
+                    : "bg-transparent border-gray-100 text-gray-400"
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -369,11 +368,10 @@ export default function ReportForm() {
               </label>
               <label className="cursor-pointer flex-1">
                 <div
-                  className={`py-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${
-                    formData.is_last_month
-                      ? "bg-gray-900 border-gray-900 text-white shadow-md"
-                      : "bg-transparent border-gray-100 text-gray-400"
-                  }`}
+                  className={`py-2.5 rounded-xl border transition-all flex items-center justify-center gap-2 ${formData.is_last_month
+                    ? "bg-gray-900 border-gray-900 text-white shadow-md"
+                    : "bg-transparent border-gray-100 text-gray-400"
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -395,7 +393,7 @@ export default function ReportForm() {
             </div>
           </div>
 
-          <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
             <h2 className="text-lg font-black text-gray-800 uppercase flex items-center gap-2">
               <ImageIcon size={20} className="text-brand" /> Redes Sociales
             </h2>
@@ -502,7 +500,7 @@ export default function ReportForm() {
             </div>
           </div>
 
-          <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+          <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-black text-gray-800 uppercase flex items-center gap-2">
                 <Globe size={20} className="text-brand" /> Avance Web
@@ -534,7 +532,7 @@ export default function ReportForm() {
         </div>
 
         {/* COLUMNA 2: HITOS Y ENTREGABLES */}
-        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-8">
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-8">
           <h2 className="text-lg font-black text-gray-800 uppercase">
             Hitos de Difusión
           </h2>
@@ -706,7 +704,7 @@ export default function ReportForm() {
         </div>
 
         {/* COLUMNA 3 */}
-        <div className="bg-white p-8 rounded-[32px] border-2 border-brand/5 shadow-sm space-y-6 bg-gradient-to-br from-white to-gray-50/30">
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border-2 border-brand/5 shadow-sm space-y-6 bg-gradient-to-br from-white to-gray-50/30">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-brand/10 rounded-2xl text-brand">
               <MessageSquare size={22} />
@@ -729,7 +727,7 @@ export default function ReportForm() {
               }))
             }
             placeholder="Escribe la conclusión final aquí..."
-            className="w-full bg-gray-50/50 border-none rounded-[24px] p-8 font-medium text-gray-700 min-h-[460px] outline-none italic text-sm leading-relaxed shadow-inner"
+            className="w-full bg-gray-50/50 border-none rounded-[24px] p-4 md:p-8 font-medium text-gray-700 min-h-[460px] outline-none italic text-sm leading-relaxed shadow-inner"
           />
         </div>
       </form>

@@ -121,7 +121,7 @@ export default function ProjectForm() {
     );
 
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-gray-50/20 min-h-screen font-sans">
+    <div className="max-w-4xl mx-auto p-4 md:p-8 bg-gray-50/20 min-h-screen font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <button
@@ -130,10 +130,10 @@ export default function ProjectForm() {
           >
             <ArrowLeft size={16} /> Cancelar
           </button>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none">
             {isEditing ? "Editar Paisaje" : "Nuevo Paisaje"}
           </h1>
-          <p className="text-brand font-bold text-lg mt-1 italic">
+          <p className="text-brand font-bold text-sm md:text-lg mt-1 italic">
             Socio: {partnerName || "Cargando..."}
           </p>
         </div>
@@ -141,7 +141,7 @@ export default function ProjectForm() {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* DATOS GENERALES */}
-        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand/10 rounded-xl text-brand">
               <Layout size={20} />
@@ -190,7 +190,7 @@ export default function ProjectForm() {
         </div>
 
         {/* METAS DE CUMPLIMIENTO Y FECHAS */}
-        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand/10 rounded-xl text-brand">
               <Target size={20} />
@@ -284,13 +284,13 @@ export default function ProjectForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gray-900 hover:bg-black text-white font-black py-6 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-sm tracking-[0.2em] uppercase active:scale-[0.98]"
+          className="w-full bg-gray-900 hover:bg-black text-white font-black py-4 md:py-6 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-sm tracking-[0.2em] uppercase active:scale-[0.98]"
         >
           {loading
             ? "Guardando..."
             : isEditing
-            ? "Actualizar Paisaje"
-            : "Crear Paisaje"}
+              ? "Actualizar Paisaje"
+              : "Crear Paisaje"}
           <Save size={20} className="text-brand" />
         </button>
       </form>

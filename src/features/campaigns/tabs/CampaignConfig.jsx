@@ -105,27 +105,29 @@ export default function CampaignConfig({
           ))}
         </div>
         {!isReadOnly && (
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               placeholder="Nombre"
-              className="w-1/3 bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none"
+              className="w-full sm:w-1/3 bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none"
               value={newAssetLabel}
               onChange={(e) => setNewAssetLabel(e.target.value)}
             />
-            <input
-              type="url"
-              placeholder="URL..."
-              className="flex-1 bg-gray-50 p-3 rounded-xl text-xs font-medium outline-none"
-              value={newAssetUrl}
-              onChange={(e) => setNewAssetUrl(e.target.value)}
-            />
-            <button
-              onClick={addAsset}
-              className="bg-gray-100 p-3 rounded-xl hover:bg-gray-200"
-            >
-              <Plus size={16} />
-            </button>
+            <div className="flex gap-2 flex-1">
+              <input
+                type="url"
+                placeholder="URL..."
+                className="flex-1 bg-gray-50 p-3 rounded-xl text-xs font-medium outline-none"
+                value={newAssetUrl}
+                onChange={(e) => setNewAssetUrl(e.target.value)}
+              />
+              <button
+                onClick={addAsset}
+                className="bg-gray-100 p-3 rounded-xl hover:bg-gray-200 shrink-0"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -144,7 +146,7 @@ export default function CampaignConfig({
         />
       </div>
 
-      <div className="border border-gray-200 rounded-3xl p-8">
+      <div className="border border-gray-200 rounded-3xl p-6 md:p-8">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-black text-gray-900 uppercase flex items-center gap-2">
             <Wallet size={20} className="text-brand" /> Presupuesto
@@ -187,7 +189,7 @@ export default function CampaignConfig({
           ))}
         </div>
         {!isReadOnly && (
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               placeholder="Concepto"
@@ -195,54 +197,58 @@ export default function CampaignConfig({
               value={newBudgetItem}
               onChange={(e) => setNewBudgetItem(e.target.value)}
             />
-            <input
-              type="number"
-              placeholder="Monto"
-              className="w-32 bg-white border border-gray-200 p-3 rounded-xl text-xs font-bold outline-none"
-              value={newBudgetAmount}
-              onChange={(e) => setNewBudgetAmount(e.target.value)}
-            />
-            <button
-              onClick={addBudgetItem}
-              className="bg-brand text-white px-4 rounded-xl hover:bg-black"
-            >
-              <Plus size={18} />
-            </button>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="Monto"
+                className="w-full sm:w-32 bg-white border border-gray-200 p-3 rounded-xl text-xs font-bold outline-none"
+                value={newBudgetAmount}
+                onChange={(e) => setNewBudgetAmount(e.target.value)}
+              />
+              <button
+                onClick={addBudgetItem}
+                className="bg-brand text-white px-4 py-3 rounded-xl hover:bg-black shrink-0"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="border border-gray-200 rounded-3xl p-8 bg-white">
+      <div className="border border-gray-200 rounded-3xl p-6 md:p-8 bg-white">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-black text-gray-900 uppercase flex items-center gap-2">
             <TrendingUp size={20} className="text-brand" /> KPIs
           </h3>
           {!isReadOnly && (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Métrica"
-                className="bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold outline-none w-32"
-                value={newKpiName}
-                onChange={(e) => setNewKpiName(e.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Meta"
-                className="bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold outline-none w-20"
-                value={newKpiTarget}
-                onChange={(e) => setNewKpiTarget(e.target.value)}
-              />
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <div className="flex gap-2 w-full sm:w-auto">
+                <input
+                  type="text"
+                  placeholder="Métrica"
+                  className="flex-1 sm:w-32 bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold outline-none"
+                  value={newKpiName}
+                  onChange={(e) => setNewKpiName(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Meta"
+                  className="w-20 bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-bold outline-none"
+                  value={newKpiTarget}
+                  onChange={(e) => setNewKpiTarget(e.target.value)}
+                />
+              </div>
               <button
                 onClick={addKpi}
-                className="bg-brand text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-black uppercase"
+                className="w-full sm:w-auto bg-brand text-white px-4 py-2 rounded-xl text-[10px] font-black hover:bg-black uppercase tracking-widest whitespace-nowrap"
               >
                 + KPI
               </button>
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {formData.kpis.map((k) => (
             <div
               key={k.id}

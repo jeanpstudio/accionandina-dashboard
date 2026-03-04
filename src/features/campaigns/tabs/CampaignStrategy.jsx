@@ -39,7 +39,7 @@ export default function CampaignStrategy({ formData, liveUpdate, isReadOnly }) {
               value={formData.description || ""}
               onChange={(val) => liveUpdate("description", val)}
               placeholder="¿Cuál es la historia detrás de la campaña?..."
-              minHeight="300px"
+              minHeight="200px"
             />
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function CampaignStrategy({ formData, liveUpdate, isReadOnly }) {
               value={formData.target_audience || ""}
               onChange={(val) => liveUpdate("target_audience", val)}
               placeholder="Describe a tu audiencia ideal..."
-              minHeight="250px"
+              minHeight="200px"
             />
           </div>
         </div>

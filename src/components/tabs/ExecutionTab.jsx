@@ -272,8 +272,8 @@ export default function ExecutionTab({
         </div>
       </div>
 
-      {/* GRID DE 4 COLUMNAS */}
-      <div className="grid grid-cols-4 gap-4 h-[65vh]">
+      {/* GRID DE DIAS (RESPONSIVO) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 min-h-[60vh] h-auto xl:h-[65vh]">
         {Array.from({ length: 4 }).map((_, i) => {
           const dayDate = new Date(columnStartDate);
           dayDate.setDate(columnStartDate.getDate() + i);
@@ -370,7 +370,7 @@ export default function ExecutionTab({
             Sin notas registradas.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {monthlyNotes.map((note) => (
               <div
                 key={note.id}
@@ -567,7 +567,7 @@ export default function ExecutionTab({
                       )}
                     </div>
                     {scheduleData.resource_link &&
-                    scheduleData.resource_link.includes("docs.google.com") ? (
+                      scheduleData.resource_link.includes("docs.google.com") ? (
                       <div className="flex-1 rounded-xl overflow-hidden border border-gray-200 bg-white shadow-inner relative h-80">
                         <iframe
                           src={getEmbedUrl(scheduleData.resource_link)}

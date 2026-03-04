@@ -39,6 +39,16 @@ export default function AdminDashboard() {
     return new Date(date - offset).toISOString().split("T")[0];
   };
 
+  const getWeeksInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1).getDay(); // 0 (Dom) a 6 (Sab)
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    return Math.ceil((daysInMonth + firstDay) / 7);
+  };
+
+  const totalWeeks = getWeeksInMonth(currentDate);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -133,13 +143,13 @@ export default function AdminDashboard() {
   return (
     <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
       {/* HEADER */}
-      <div className="px-8 py-6 flex justify-between items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0">
+      <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col md:flex-row justify-between items-start md:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
         <div>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
-            <BrainCircuit className="text-brand" size={32} /> Mi Administración
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+            <BrainCircuit className="text-brand" size={24} md:size={32} /> Mi Administración
           </h1>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-brand font-bold text-lg italic">
+          <div className="flex flex-wrap items-center gap-3 mt-1">
+            <p className="text-brand font-bold text-sm md:text-lg italic">
               Gestión & Productividad
             </p>
             {backlogCount > 0 && (
@@ -150,7 +160,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-1.5 shadow-sm">
             <button
               onClick={() => changeMonth(-1)}
@@ -172,25 +182,25 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          <div className="flex bg-gray-100 p-1.5 rounded-xl">
+          <div className="flex bg-gray-100 p-1 rounded-xl overflow-x-auto custom-scrollbar">
             {[
-              { id: "plan", label: "1. Planificación", icon: CheckSquare },
-              { id: "execute", label: "2. Ejecución", icon: Calendar },
-              { id: "report", label: "3. Cierre", icon: Trophy },
+              { id: "plan", label: "Plan", icon: CheckSquare },
+              { id: "execute", label: "Ejecución", icon: Calendar },
+              { id: "report", label: "Cierre", icon: Trophy },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === tab.id ? "bg-gray-900 text-white shadow-md" : "text-gray-400 hover:text-gray-600 hover:bg-gray-200"}`}
+                className={`px-3 md:px-5 py-2 md:py-2.5 rounded-lg text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id ? "bg-gray-900 text-white shadow-md" : "text-gray-400 hover:text-gray-600 hover:bg-gray-200"}`}
               >
-                <tab.icon size={14} /> {tab.label}
+                <tab.icon size={12} md:size={14} /> {tab.label}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
         <div className="max-w-7xl mx-auto">
           {activeTab === "plan" && (
             <PlanningTab
@@ -200,6 +210,7 @@ export default function AdminDashboard() {
               monthKey={monthKey}
               onUpdate={fetchData}
               isPastMonth={isPastMonth}
+              totalWeeks={totalWeeks}
             />
           )}
 

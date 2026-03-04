@@ -21,6 +21,7 @@ export default function PlanningTab({
   monthKey,
   currentDate,
   onUpdate,
+  totalWeeks,
 }) {
   // --- ESTADOS LOCALES ---
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -44,8 +45,6 @@ export default function PlanningTab({
     resource_link: "",
   });
   const [newCategory, setNewCategory] = useState("");
-
-  const totalWeeks = 5;
 
   // --- HANDLERS BASE DE DATOS ---
   const handleSaveTask = async () => {
@@ -85,7 +84,12 @@ export default function PlanningTab({
     if (!taskId) return;
     await supabase
       .from("personal_tasks")
-      .update({ target_week: targetWeek, start_date: null, end_date: null })
+      .update({
+        target_week: targetWeek,
+        start_date: null,
+        end_date: null,
+        month_key: monthKey,
+      })
       .eq("id", taskId);
     onUpdate();
   };
@@ -106,28 +110,48 @@ export default function PlanningTab({
 
   // --- LÓGICA DE VISIBILIDAD ---
   const isTaskVisibleInWeek = (task, weekNum) => {
-    if (!task.start_date) return parseInt(task.target_week) === weekNum;
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    const currentMonthDate = new Date(currentYear, currentMonth, 1);
+
+    // 1. Tareas sin fechas: Respetamos target_week o forzamos Semana 1 si es backlog
+    if (!task.start_date) {
+      if (task.is_backlog) return weekNum === 1;
+      return parseInt(task.target_week) === weekNum;
+    }
+
+    // 2. Tareas con fechas:
     const taskStart = new Date(task.start_date + "T12:00:00");
     const taskEnd = task.end_date
       ? new Date(task.end_date + "T12:00:00")
       : taskStart;
-    const currentMonth = currentDate.getMonth();
-    const currentYear = currentDate.getFullYear();
 
+    // Prorrogar visibilidad si está pendiente y terminó antes del mes actual (Overdue)
+    if (task.status !== "COMPLETADO" && taskEnd < currentMonthDate) {
+      return weekNum === 1;
+    }
+
+    // Verificar si la tarea cruza el mes y la semana solicitada
+    // Iniciamos el loop en el inicio de la tarea o el inicio del mes (lo que sea posterior)
     let loop = new Date(taskStart);
+    if (loop < currentMonthDate) loop = new Date(currentMonthDate);
+
+    const firstDayOfMonth = currentMonthDate.getDay();
+
     while (loop <= taskEnd) {
       if (
         loop.getMonth() === currentMonth &&
         loop.getFullYear() === currentYear
       ) {
-        const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-        const day = loop.getDate();
-        const calcWeek = Math.ceil((day + firstDayOfMonth) / 7);
+        const calcWeek = Math.ceil((loop.getDate() + firstDayOfMonth) / 7);
         if (calcWeek === weekNum) return true;
+      } else {
+        // Si ya salimos del mes visualizado, terminamos la búsqueda
+        if (loop > currentMonthDate) break;
       }
       loop.setDate(loop.getDate() + 1);
-      if (loop.getDate() === 1 && loop.getMonth() !== currentMonth) break;
     }
+
     return false;
   };
 
@@ -299,7 +323,7 @@ export default function PlanningTab({
                 })
               }
             >
-              {[1, 2, 3, 4, 5].map((w) => (
+              {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((w) => (
                 <option key={w} value={w}>
                   {w}
                 </option>
@@ -333,9 +357,9 @@ export default function PlanningTab({
         </div>
       </div>
 
-      {/* 2. COLUMNAS SEMANALES (MEJORADO: 3 Columnas + Compacto) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-x-auto pb-4">
-        {[1, 2, 3, 4, 5].map((week) => (
+      {/* 2. COLUMNAS SEMANALES (MEJORADO: Adaptable + Espaciado) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
           <div
             key={week}
             onDragOver={(e) => e.preventDefault()}
@@ -405,13 +429,13 @@ export default function PlanningTab({
                 ))}
               {tasks.filter((t) => isTaskVisibleInWeek(t, week)).length ===
                 0 && (
-                <div className="text-center py-8 opacity-30">
-                  <Layout size={20} className="mx-auto mb-1 text-gray-300" />
-                  <p className="text-[8px] font-black uppercase text-gray-400">
-                    Vacío
-                  </p>
-                </div>
-              )}
+                  <div className="text-center py-8 opacity-30">
+                    <Layout size={20} className="mx-auto mb-1 text-gray-300" />
+                    <p className="text-[8px] font-black uppercase text-gray-400">
+                      Vacío
+                    </p>
+                  </div>
+                )}
             </div>
           </div>
         ))}
@@ -593,11 +617,13 @@ export default function PlanningTab({
                     })
                   }
                 >
-                  {[1, 2, 3, 4, 5].map((w) => (
-                    <option key={w} value={w}>
-                      Semana {w}
-                    </option>
-                  ))}
+                  {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(
+                    (w) => (
+                      <option key={w} value={w}>
+                        Semana {w}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
               <button
@@ -724,19 +750,24 @@ export default function PlanningTab({
                 <label className="text-[10px] font-black text-gray-400 uppercase block mb-2">
                   Semana
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="5"
-                  className="w-full bg-gray-50 p-4 rounded-2xl text-lg font-bold text-center"
+                <select
+                  className="w-full bg-gray-50 p-4 rounded-2xl text-lg font-bold text-center outline-none uppercase"
                   value={summaryOptions.week}
                   onChange={(e) =>
                     setSummaryOptions({
                       ...summaryOptions,
-                      week: e.target.value,
+                      week: parseInt(e.target.value),
                     })
                   }
-                />
+                >
+                  {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(
+                    (w) => (
+                      <option key={w} value={w}>
+                        {w}
+                      </option>
+                    ),
+                  )}
+                </select>
               </div>
             </div>
             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 mb-8">
@@ -771,10 +802,10 @@ export default function PlanningTab({
                   {tasks.filter((t) =>
                     isTaskVisibleInWeek(t, parseInt(summaryOptions.week)),
                   ).length === 0 && (
-                    <div className="p-4 text-center text-gray-400 italic text-xs">
-                      No hay actividades para esta semana.
-                    </div>
-                  )}
+                      <div className="p-4 text-center text-gray-400 italic text-xs">
+                        No hay actividades para esta semana.
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

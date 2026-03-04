@@ -66,7 +66,7 @@ export default function PartnerForm() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-gray-50/20 min-h-screen font-sans">
+    <div className="max-w-3xl mx-auto p-4 md:p-8 bg-gray-50/20 min-h-screen font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <button
@@ -75,10 +75,10 @@ export default function PartnerForm() {
           >
             <ArrowLeft size={16} /> Cancelar
           </button>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none">
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none">
             {isEditing ? "Editar Socio" : "Nuevo Socio"}
           </h1>
-          <p className="text-brand font-bold text-lg mt-1 italic">
+          <p className="text-brand font-bold text-sm md:text-lg mt-1 italic">
             {isEditing
               ? "Actualizar información de la ONG"
               : "Registrar nueva alianza"}
@@ -87,7 +87,7 @@ export default function PartnerForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand/10 rounded-xl text-brand">
               <Building2 size={20} />
@@ -193,13 +193,13 @@ export default function PartnerForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gray-900 hover:bg-black text-white font-black py-6 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-sm tracking-[0.2em] uppercase active:scale-[0.98]"
+          className="w-full bg-gray-900 hover:bg-black text-white font-black py-4 md:py-6 rounded-3xl transition-all shadow-xl flex items-center justify-center gap-3 text-sm tracking-[0.2em] uppercase active:scale-[0.98]"
         >
           {loading
             ? "Guardando..."
             : isEditing
-            ? "Actualizar Socio"
-            : "Registrar Socio"}
+              ? "Actualizar Socio"
+              : "Registrar Socio"}
           <Save size={20} className="text-brand" />
         </button>
       </form>

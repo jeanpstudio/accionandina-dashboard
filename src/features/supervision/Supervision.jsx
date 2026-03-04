@@ -364,7 +364,7 @@ export default function Supervision() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
                   {filteredPartners.map((partner) => {
                     const dynamicEmail = getPartnerEmail(partner.id);
                     const hasUser = dynamicEmail.includes("@");
@@ -435,9 +435,9 @@ export default function Supervision() {
                         </div>
 
                         {/* Stats Resumen */}
-                        <div className="px-8 py-4 border-b border-gray-50 grid grid-cols-3 gap-4 divide-x divide-gray-100 bg-white">
+                        <div className="px-6 md:px-8 py-4 border-b border-gray-50 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:divide-x divide-gray-100 bg-white">
                           <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1">
                               <Megaphone size={10} /> Campañas
                             </span>
                             <span className="text-lg font-black text-gray-900">
@@ -445,7 +445,7 @@ export default function Supervision() {
                             </span>
                           </div>
                           <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1">
                               <MapPin size={10} /> Paisajes
                             </span>
                             <span className="text-lg font-black text-gray-900">
@@ -453,7 +453,7 @@ export default function Supervision() {
                             </span>
                           </div>
                           <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1">
                               <ImageIcon size={10} /> Contenido
                             </span>
                             <span className="text-lg font-black text-gray-900">
