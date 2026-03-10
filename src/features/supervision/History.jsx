@@ -523,45 +523,50 @@ export default function History() {
       }
     }
 
-    const totalVideos = Math.max(
-      ...seasonReports.map((rep) =>
-        Array.isArray(rep.videos) ? rep.videos.length : 0,
-      ),
-      0,
-    );
-    const totalCamps = Math.max(
-      ...seasonReports.map((rep) =>
-        Array.isArray(rep.campaigns) ? rep.campaigns.length : 0,
-      ),
-      0,
-    );
-    const totalMilky = Math.max(
-      ...seasonReports.map((rep) =>
-        Array.isArray(rep.milkywire_material)
-          ? rep.milkywire_material.length
-          : 0,
-      ),
-      0,
-    );
+    const totalVideos = Array.isArray(r.videos) ? r.videos.length : 0;
+    const totalCamps = Array.isArray(r.campaigns) ? r.campaigns.length : 0;
+    const totalMilky = Array.isArray(r.milkywire_material) ? r.milkywire_material.length : 0;
+
+    // Verificar si es mes de entrega de video (Junio, Octubre, Marzo)
+    const videoMonths = ["Junio", "Octubre", "Marzo"];
+    const isVideoMonth = videoMonths.includes(r.report_month);
+
+    // El "isMilkyMonth" en History lo inferimos si hay cometario o si queremos ser precisos 
+    // pero por ahora usemos la presencia de material o comentario
+    const hasMilkyJustification = r.milkywire_comment && r.milkywire_comment.trim().length > 0;
+    const hasVideoJustification = r.video_comment && r.video_comment.trim().length > 0;
+
     const textStyle =
       "font-family: Arial, sans-serif; font-size: 13px; color: #374151; line-height: 1.5;";
     const getStatusColor = (isComplete) => (isComplete ? "#065f46" : "#dc2626");
 
+    const campaignItemsHTML = Array.isArray(r.campaigns) && r.campaigns.length > 0
+      ? r.campaigns.map(c => `<li><b>${c.title}:</b> ${c.comment || 'Participación registrada.'}</li>`).join('')
+      : '<li>No se reportaron campañas activas este mes.</li>';
+
+    const videoInfoHTML = totalVideos > 0
+      ? `<b>${totalVideos} video(s) registrados.</b>`
+      : (isVideoMonth ? `<span style="color: #dc2626; font-weight: bold;">OMITIDO (Mes de entrega)</span>` : 'No se subieron videos.');
+
+    const milkyInfoHTML = totalMilky > 0
+      ? `<b>${totalMilky} material(es) subidos.</b>`
+      : (hasMilkyJustification ? `<span style="color: #ea580c; font-weight: bold;">JUSTIFICADO</span>` : 'Puntos sin material.');
+
     const historyRows =
       previousReports.length > 0
         ? previousReports
-            .map((prev) => {
-              const pStats = calculateMonthlyProgress(
-                prev.photo_count,
-                targetPhotos,
-              );
-              const rStats = calculateMonthlyProgress(
-                prev.post_count,
-                targetPosts,
-              );
-              return `<tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; border-right: 1px solid #eee;">${prev.report_month || "Mes"}</td><td style="padding: 8px; border-right: 1px solid #eee; text-align: center;"><span style="color: ${getStatusColor(pStats.isComplete)}; font-weight: bold;">${prev.photo_count}</span><span style="font-size: 9px; color: #065f46;">(+${fmt(pStats.gainedNumber)}%)</span></td><td style="padding: 8px; text-align: center;"><span style="color: ${getStatusColor(rStats.isComplete)}; font-weight: bold;">${prev.post_count}</span><span style="font-size: 9px; color: #065f46;">(+${fmt(rStats.gainedNumber)}%)</span></td></tr>`;
-            })
-            .join("")
+          .map((prev) => {
+            const pStats = calculateMonthlyProgress(
+              prev.photo_count,
+              targetPhotos,
+            );
+            const rStats = calculateMonthlyProgress(
+              prev.post_count,
+              targetPosts,
+            );
+            return `<tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; border-right: 1px solid #eee;">${prev.report_month || "Mes"}</td><td style="padding: 8px; border-right: 1px solid #eee; text-align: center;"><span style="color: ${getStatusColor(pStats.isComplete)}; font-weight: bold;">${prev.photo_count}</span><span style="font-size: 9px; color: #065f46;">(+${fmt(pStats.gainedNumber)}%)</span></td><td style="padding: 8px; text-align: center;"><span style="color: ${getStatusColor(rStats.isComplete)}; font-weight: bold;">${prev.post_count}</span><span style="font-size: 9px; color: #065f46;">(+${fmt(rStats.gainedNumber)}%)</span></td></tr>`;
+          })
+          .join("")
         : `<tr><td colspan="3" style="padding: 10px; text-align: center; color: #9ca3af; font-style: italic;">Sin reportes previos.</td></tr>`;
 
     return `
@@ -574,11 +579,17 @@ export default function History() {
           <tr><td style="padding: 10px; border: 1px solid #eee;">Fotos de Actividades</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${r.photo_count} / ${targetPhotos}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;"><div style="font-weight: 800; font-size: 14px; color: ${photosColor};">${displayTotalProgressPhotos}%</div><div style="font-size: 10px; color: #6b7280;">+${fmt(photoStats.gainedNumber)}% este mes</div></td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Publicaciones RRSS</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${r.post_count} / ${targetPosts}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;"><div style="font-weight: 800; font-size: 14px; color: ${postsColor};">${displayTotalProgressPosts}%</div><div style="font-size: 10px; color: #6b7280;">+${fmt(postStats.gainedNumber)}% este mes</div></td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Sitio Web</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">Estado Actual</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${webStatus.hex};">${r.web_progress_percent}%</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Videos de Temporada</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${totalVideos} entregados</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${videoStatus.hex};">${totalVideos > 0 ? "OK" : "PENDIENTE"}</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${totalMilky} entregados</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : "#f59e0b"};">${totalMilky > 0 ? "OK" : "PENDIENTE"}</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Campañas</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${totalCamps} realizadas</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalCamps > 0 ? "#065f46" : "#f59e0b"};">${totalCamps > 0 ? "OK" : "PENDIENTE"}</td></tr>
+          <tr><td style="padding: 10px; border: 1px solid #eee;">Videos de Temporada</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${videoInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalVideos > 0 ? "#065f46" : (isVideoMonth ? "#dc2626" : "#9ca3af")};">${totalVideos > 0 ? "OK" : (isVideoMonth ? "CRÍTICO" : "N/A")}</td></tr>
+          <tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${milkyInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : (hasMilkyJustification ? "#ea580c" : "#9ca3af")};">${totalMilky > 0 ? "OK" : (hasMilkyJustification ? "JUSTIFICADO" : "N/A")}</td></tr>
         </tbody>
       </table>
+
+      <div style="background-color: #f0fdf4; padding: 15px; border-radius: 12px; border: 1px solid #dcfce7; margin-bottom: 20px;">
+        <p style="font-size: 11px; color: #166534; font-weight: 800; text-transform: uppercase; margin: 0 0 8px 0;">Campañas Ejecutadas:</p>
+        <ul style="${textStyle} margin: 0; padding-left: 20px;">
+           ${campaignItemsHTML}
+        </ul>
+      </div>
       <p style="font-size: 11px; font-weight: bold; color: #4b5563; text-transform: uppercase; margin-bottom: 8px;">Historial de meses anteriores:</p>
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-family: Arial, sans-serif; font-size: 11px; border: 1px solid #eee; background-color: #f9fafb;"><thead><tr style="background-color: #e5e7eb; color: #374151; text-align: left;"><th style="padding: 8px; border-right: 1px solid #d1d5db;">MES</th><th style="padding: 8px; border-right: 1px solid #d1d5db; text-align: center;">FOTOS</th><th style="padding: 8px; text-align: center;">POSTS</th></tr></thead><tbody>${historyRows}</tbody></table>
       <div style="background-color: #f9fafb; padding: 20px; border-radius: 12px; border: 1px solid #eee;">
@@ -587,8 +598,7 @@ export default function History() {
           <p style="margin: 4px 0;">• <b>Fotos:</b> ${r.photo_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Publicaciones:</b> ${r.post_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Web:</b> ${r.web_comment || "Sin observaciones."}</p>
-          <p style="margin: 4px 0;">• <b>Videos:</b> ${r.video_comment || "Sin observaciones."}</p>
-          <p style="margin: 4px 0;">• <b>Campañas:</b> ${r.campaign_comment || "Sin observaciones."}</p>
+          <p style="margin: 4px 0;">• <b>Videos ${isVideoMonth ? '(Mes de Entrega)' : ''}:</b> ${r.video_comment || "Sin observaciones relevantes."}</p>
           <p style="margin: 4px 0;">• <b>Milkywire:</b> ${r.milkywire_comment || "Sin observaciones."}</p>
         </div>
       </div>

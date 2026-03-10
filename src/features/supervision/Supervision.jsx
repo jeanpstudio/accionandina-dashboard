@@ -51,9 +51,43 @@ export default function Supervision() {
     partner_id: "",
   });
 
+  // --- CONFIGURACIÓN GLOBAL DE TEMPORADA ---
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsSeason, setSettingsSeason] = useState("2025-2026");
+  const [settingsTab, setSettingsTab] = useState("campaigns"); // "campaigns" | "milkywire"
+  const [seasonCampaigns, setSeasonCampaigns] = useState([]);
+  const [newCampaignTitle, setNewCampaignTitle] = useState("");
+  const [milkywireSchedule, setMilkywireSchedule] = useState([]);
+  const [isGeneratingMilky, setIsGeneratingMilky] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Recurso para cargar campañas y schedules de la temporada seleccionada en settings
+  useEffect(() => {
+    if (isSettingsModalOpen) {
+      loadSeasonSettings(settingsSeason);
+    }
+  }, [isSettingsModalOpen, settingsSeason]);
+
+  async function loadSeasonSettings(season) {
+    // 1. Campañas Globales de esta temporada
+    const { data: camps } = await supabase
+      .from("season_campaigns")
+      .select("*")
+      .eq("season_name", season)
+      .order("created_at", { ascending: true });
+    setSeasonCampaigns(camps || []);
+
+    // 2. Cronograma Milkywire de esta temporada
+    const { data: milky } = await supabase
+      .from("milkywire_schedules")
+      .select("*, partners(name)")
+      .eq("season_name", season)
+      .order("target_month");
+    setMilkywireSchedule(milky || []);
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -234,6 +268,108 @@ export default function Supervision() {
     }
   };
 
+  // --- LÓGICA CONFIGURACIÓN GLOBAL (ADMIN) ---
+
+  // Agregar una nueva campaña a la lista global de la temporada
+  const handleAddSeasonCampaign = async () => {
+    if (!newCampaignTitle.trim()) return;
+    const { error } = await supabase.from("season_campaigns").insert([{
+      season_name: settingsSeason,
+      title: newCampaignTitle.trim()
+    }]);
+    if (error) alert(error.message);
+    else {
+      setNewCampaignTitle("");
+      loadSeasonSettings(settingsSeason);
+    }
+  };
+
+  // Eliminar campaña global
+  const handleDeleteSeasonCampaign = async (id) => {
+    if (confirm("¿Eliminar campaña global? Esto no afectará a los reportes pasados que ya escribieron sobre ella, solo ya no saldrá como opción nueva.")) {
+      const { error } = await supabase.from("season_campaigns").delete().eq("id", id);
+      if (error) alert(error.message);
+      else loadSeasonSettings(settingsSeason);
+    }
+  };
+
+  // Algoritmo de "Chocolateo" Milkywire
+  // Distribuye a los 15 socios actuales en 12 meses (3 por mes = 36 slots)
+  const handleGenerateMilkywire = async () => {
+    if (!confirm("Esto borrará el cronograma actual de la temporada y generará uno nuevo repartido entre los 15 socios actuales de forma equitativa (3 cupos x mes). ¿Continuar?")) return;
+
+    setIsGeneratingMilky(true);
+    try {
+      // 1. Limpiar cronograma existente para la temporada
+      await supabase.from("milkywire_schedules").delete().eq("season_name", settingsSeason);
+
+      // 2. Obtener socios activos del sistema
+      const { data: activePartners } = await supabase.from("partners").select("id").eq("is_active", true);
+      if (!activePartners || activePartners.length === 0) throw new Error("No hay socios activos.");
+
+      const pIds = activePartners.map(p => p.id);
+
+      const targetMonths = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+      ];
+
+      // Creamos un pool de IDs repetidos para cubrir los 36 espacios (3 x mes)
+      let pool = [];
+      while (pool.length < 36) {
+        pool = pool.concat(pIds);
+      }
+      // Cortar a exactamente 36
+      pool = pool.slice(0, 36);
+
+      // Mezcla aleatoria (Shuffle) Fisher-Yates
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      // 3. Asignación por meses asegurando que un socio no se repita el MISMO mes
+      const newSchedules = [];
+      let poolIndex = 0;
+
+      for (const month of targetMonths) {
+        let assignedInThisMonth = new Set();
+        let tries = 0;
+
+        while (assignedInThisMonth.size < 3) {
+          if (tries > 50) break; // Evitar loop si el pool está vacío o no se pueden asignar 3 únicos
+
+          let candidate = pool[poolIndex % pool.length];
+
+          if (!assignedInThisMonth.has(candidate)) {
+            assignedInThisMonth.add(candidate);
+            newSchedules.push({
+              season_name: settingsSeason,
+              target_month: month,
+              partner_id: candidate
+            });
+            pool.splice(poolIndex % pool.length, 1); // Quitar del pool para rotar y que otros socios salgan
+          } else {
+            poolIndex++;
+          }
+          tries++;
+        }
+      }
+
+      // 4. Guardar en Supabase
+      const { error: insErr } = await supabase.from("milkywire_schedules").insert(newSchedules);
+      if (insErr) throw insErr;
+
+      loadSeasonSettings(settingsSeason);
+      alert("Cronograma generado exitosamente.");
+
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setIsGeneratingMilky(false);
+    }
+  };
+
   const filteredPartners = partners.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -280,6 +416,17 @@ export default function Supervision() {
               <Users size={14} /> Usuarios
             </button>
           </div>
+
+          {/* BOTÓN CONFIGURAR TEMPORADA */}
+          {!isReadOnly && (
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="bg-white border border-gray-200 text-gray-600 px-5 py-3 rounded-2xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm ml-2"
+            >
+              <Settings size={16} /> Config. Temporada
+            </button>
+          )}
+
           <button
             onClick={() => navigate("/global-report")}
             className="bg-white border border-gray-200 text-gray-600 px-5 py-3 rounded-2xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
@@ -814,6 +961,133 @@ export default function Supervision() {
               >
                 Crear Acceso
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL CONFIG GLOBALES TEMPORADA --- */}
+      {isSettingsModalOpen && !isReadOnly && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-[24px] sm:rounded-[32px] w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
+            {/* Header */}
+            <div className="bg-gray-50 border-b border-gray-100 p-5 sm:p-6 md:px-10 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="p-2 sm:p-3 bg-brand/10 rounded-xl sm:rounded-2xl text-brand">
+                  <Settings size={20} className="sm:w-6 sm:h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-xl font-black text-gray-900 uppercase tracking-tight leading-tight">Parametrización</h2>
+                  <p className="text-[8px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-widest">Ajustes globales de la temporada</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSettingsModalOpen(false)} className="bg-white p-2 sm:p-3 rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 text-gray-400 hover:text-red-500 transition-all">
+                <X size={16} className="sm:w-5 sm:h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 flex flex-col md:flex-row gap-6 sm:gap-8">
+              {/* Col Izq: Navegacion e inputs base */}
+              <div className="md:w-1/3 shrink-0 flex flex-col gap-4 sm:gap-6">
+                <div>
+                  <label className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">Temporada:</label>
+                  <select
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl sm:rounded-2xl p-3 sm:p-4 font-black shadow-sm outline-none focus:border-brand cursor-pointer uppercase text-xs sm:text-sm"
+                    value={settingsSeason}
+                    onChange={(e) => setSettingsSeason(e.target.value)}
+                  >
+                    <option value="2024-2025">2024-2025</option>
+                    <option value="2025-2026">2025-2026</option>
+                    <option value="2026-2027">2026-2027</option>
+                    <option value="2027-2028">2027-2028</option>
+                  </select>
+                </div>
+
+                <div className="flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                  <button
+                    onClick={() => setSettingsTab("campaigns")}
+                    className={`flex-1 md:flex-none p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left uppercase text-[9px] sm:text-xs font-black tracking-widest transition-all flex items-center gap-2 sm:gap-3 whitespace-nowrap ${settingsTab === "campaigns" ? "border-brand bg-brand/5 text-brand" : "border-gray-50 bg-gray-50 text-gray-400 hover:text-gray-600 hover:border-gray-200"}`}
+                  >
+                    <Megaphone size={16} className="shrink-0" /> Campañas
+                  </button>
+                  <button
+                    onClick={() => setSettingsTab("milkywire")}
+                    className={`flex-1 md:flex-none p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left uppercase text-[9px] sm:text-xs font-black tracking-widest transition-all flex items-center gap-2 sm:gap-3 whitespace-nowrap ${settingsTab === "milkywire" ? "border-brand bg-brand/5 text-brand" : "border-gray-50 bg-gray-50 text-gray-400 hover:text-gray-600 hover:border-gray-200"}`}
+                  >
+                    <MapPin size={16} className="shrink-0" /> Milkywire
+                  </button>
+                </div>
+              </div>
+
+              {/* Col Der: Configuración */}
+              <div className="flex-1 min-w-0 bg-white border border-gray-100 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-inner relative overflow-y-auto">
+                {settingsTab === "campaigns" && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-end border-b border-gray-100 pb-4">
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 uppercase">Campañas Habilitadas</h3>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Éstas campañas aparecerán en los formularios de los socios como checkboxes para reportar su avance.</p>
+                      </div>
+                      <span className="bg-brand text-white px-3 py-1 rounded-full text-[10px] font-black">{seasonCampaigns.length}</span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input type="text" placeholder="Nueva Campaña (Ej: Día del Arbol)..." value={newCampaignTitle} onChange={(e) => setNewCampaignTitle(e.target.value)} className="flex-1 bg-gray-50 border-none rounded-xl p-4 font-bold text-sm outline-none placeholder-gray-300" />
+                      <button onClick={handleAddSeasonCampaign} className="bg-brand text-white px-6 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-green-700 transition-colors">Añadir</button>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      {seasonCampaigns.length === 0 ? (
+                        <div className="p-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay campañas para {settingsSeason}</div>
+                      ) : (
+                        seasonCampaigns.map(camp => (
+                          <div key={camp.id} className="flex justify-between items-center bg-white border border-gray-100 p-4 rounded-2xl shadow-sm hover:border-brand/30 transition-colors">
+                            <span className="text-xs font-black text-gray-800 uppercase flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-brand"></div> {camp.title}</span>
+                            <button onClick={() => handleDeleteSeasonCampaign(camp.id)} className="text-gray-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {settingsTab === "milkywire" && (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-gray-100 pb-4 gap-4">
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 uppercase group flex items-center gap-2"><span className="animate-spin-slow">🌟</span> Sistema Milkywire</h3>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 leading-relaxed">3 Videos exigidos x Mes.<br />Se distribuirán mágicamente ("chocolateo") a los socios de la red para cumplir la cuota del equipo completo en Supabase.</p>
+                      </div>
+                      <button onClick={handleGenerateMilkywire} disabled={isGeneratingMilky} className={`shrink-0 bg-gray-900 text-white px-5 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-colors flex items-center gap-2 ${isGeneratingMilky ? "opacity-50 cursor-wait" : ""}`}>
+                        {isGeneratingMilky ? "Distribuyendo..." : "Chocolatear Socios"}
+                      </button>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-4">
+                      {milkywireSchedule.length === 0 ? (
+                        <div className="p-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay distribución generada para {settingsSeason}. ¡Haz clic arriba!</div>
+                      ) : (
+                        ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map(mes => {
+                          const sociosMes = milkywireSchedule.filter(m => m.target_month === mes);
+                          if (sociosMes.length === 0) return null;
+                          return (
+                            <div key={mes} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                              <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-3 border-b border-gray-200 pb-1 w-full">{mes}</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                {sociosMes.map((socio, idx) => (
+                                  <div key={idx} className="bg-white px-3 py-2 rounded-xl text-[9px] font-black uppercase text-emerald-700 border border-emerald-100 flex items-center gap-2 truncate shadow-sm">
+                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> {socio.partners?.name || "Eliminado"}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
