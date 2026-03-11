@@ -1,3 +1,20 @@
+/**
+ * COMPONENTE: Prensa (Sala de Prensa)
+ * ----------------------------------
+ * Centro de gestión de reputación y relaciones con medios externos.
+ * 
+ * ARQUITECTURA DE CONTENIDOS:
+ * 1. CLIPPINGS (Medios Externos): Repositorio de impactos mediáticos (URLs) con metadatos 
+ *    de fecha y nombre del medio para auditoría de impacto.
+ * 2. PRESS RELEASES (Notas Propias): Editor de comunicados oficiales con sistema de 
+ *    estados (Borrador/Publicado) y almacenamiento de imágenes en 'press-images'.
+ * 
+ * DASHBOARD DE IMPACTO:
+ * - Visualización de KPIs rápidos: Total menciones, notas publicadas y borradores en curso.
+ * 
+ * SEGURIDAD:
+ * - Acceso condicional basado en el permiso 'edit_press' del perfil de usuario.
+ */
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../app/supabase";
 import {
@@ -10,7 +27,7 @@ import {
   BarChart3,
   Search,
   PenTool,
-  Image as ImageIcon,
+  ImageIcon,
   Loader2,
   Send,
   X,

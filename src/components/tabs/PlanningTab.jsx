@@ -1,3 +1,15 @@
+/**
+ * PESTAÑA: PlanningTab
+ * --------------------
+ * Gestiona la planificación anticipada de actividades personales y de equipo.
+ * 
+ * LÓGICA DE NEGOCIO:
+ * 1. ASIGNACIÓN SEMANAL: Las tareas se organizan en columnas según la semana del mes.
+ * 2. DRAG & DROP: Permite reordenar tareas entre semanas mediante eventos nativos de arrastre.
+ * 3. CATEGORIZACIÓN: Sistema dinámico de categorías para segmentar el trabajo.
+ * 4. EXPORTACIÓN: Funciones especializadas para copiar resúmenes en formato tabla (HTML) 
+ *    compatibles con Google Docs/Sheets.
+ */
 import { useState } from "react";
 import { supabase } from "../../app/supabase";
 import {

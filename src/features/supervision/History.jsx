@@ -1,3 +1,16 @@
+/**
+ * COMPONENTE: History (Auditoría e Inteligencia de Datos)
+ * ------------------------------------------------------
+ * Herramienta de visualización de progreso acumulado y exportación de reportes.
+ * 
+ * CAPACIDADES CLAVE:
+ * 1. INDICADORES DE SALUD: Calcula el desvío entre el avance real (% de fotos/posts) 
+ *    vs el avance esperado por cronograma (Semáforo de cumplimiento).
+ * 2. AUTOMATIZACIÓN DE CORREOS: Generador dinámico de reportes en HTML listos para 
+ *    copiar/pegar en Gmail, incluyendo tablas comparativas y estados de hitos.
+ * 3. EXPORTACIÓN MASIVA: Salida a Excel (XLSX) para reportes finales de temporada.
+ * 4. SEGURIDAD: Bloquea edición si el usuario tiene rol de lectura.
+ */
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
@@ -579,8 +592,8 @@ export default function History() {
           <tr><td style="padding: 10px; border: 1px solid #eee;">Fotos de Actividades</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${r.photo_count} / ${targetPhotos}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;"><div style="font-weight: 800; font-size: 14px; color: ${photosColor};">${displayTotalProgressPhotos}%</div><div style="font-size: 10px; color: #6b7280;">+${fmt(photoStats.gainedNumber)}% este mes</div></td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Publicaciones RRSS</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${r.post_count} / ${targetPosts}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;"><div style="font-weight: 800; font-size: 14px; color: ${postsColor};">${displayTotalProgressPosts}%</div><div style="font-size: 10px; color: #6b7280;">+${fmt(postStats.gainedNumber)}% este mes</div></td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Sitio Web</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">Estado Actual</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${webStatus.hex};">${r.web_progress_percent}%</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Videos de Temporada</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${videoInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalVideos > 0 ? "#065f46" : (isVideoMonth ? "#dc2626" : "#9ca3af")};">${totalVideos > 0 ? "OK" : (isVideoMonth ? "CRÍTICO" : "N/A")}</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${milkyInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : (hasMilkyJustification ? "#ea580c" : "#9ca3af")};">${totalMilky > 0 ? "OK" : (hasMilkyJustification ? "JUSTIFICADO" : "N/A")}</td></tr>
+          <tr><td style="padding: 10px; border: 1px solid #eee;">Videos de Temporada</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${videoInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalVideos > 0 ? "#065f46" : "#dc2626"};">${totalVideos > 0 ? "OK" : "0%"}</td></tr>
+          <tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${milkyInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : (hasMilkyJustification ? "#ea580c" : "#dc2626")};">${totalMilky > 0 ? "OK" : (hasMilkyJustification ? "JUSTIFICADO" : "0%")}</td></tr>
         </tbody>
       </table>
 
@@ -598,6 +611,7 @@ export default function History() {
           <p style="margin: 4px 0;">• <b>Fotos:</b> ${r.photo_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Publicaciones:</b> ${r.post_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Web:</b> ${r.web_comment || "Sin observaciones."}</p>
+          <p style="margin: 4px 0;">• <b>Campañas:</b> ${r.campaign_comment || "Sin observaciones específicas."}</p>
           <p style="margin: 4px 0;">• <b>Videos ${isVideoMonth ? '(Mes de Entrega)' : ''}:</b> ${r.video_comment || "Sin observaciones relevantes."}</p>
           <p style="margin: 4px 0;">• <b>Milkywire:</b> ${r.milkywire_comment || "Sin observaciones."}</p>
         </div>

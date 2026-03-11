@@ -1,3 +1,13 @@
+/**
+ * NÚCLEO DE LA APLICACIÓN: App.jsx
+ * --------------------------------
+ * Este componente orquestador gestiona el enrutamiento principal (Routing)
+ * y la lógica de protección de rutas basada en el contexto de autenticación.
+ * 
+ * ESTRUCTURA DE RUTAS:
+ * - Públicas: /login (redirige si ya hay sesión).
+ * - Privadas: Envueltas en <MainLayout /> para persistencia de la interfaz.
+ */
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Login from "./features/auth/Login";
@@ -16,8 +26,6 @@ import MailingBuilder from "./features/mailing/MailingBuilder";
 import Prensa from "./features/prensa/Prensa";
 import UserAdmin from "./features/admin/UserAdmin";
 import PartnerStories from "./features/stories/PartnerStories";
-
-// 1. Importación Correcta
 import CampaignsDashboard from "./features/campaigns/CampaignsDashboard";
 
 export default function App() {
@@ -58,10 +66,6 @@ export default function App() {
           <Route path="/supervision" element={<Supervision />} />
           <Route
             path="/supervision/nuevo-reporte/:projectId"
-            element={<ReportForm />}
-          />
-          <Route
-            path="/supervision/editar-reporte/:projectId/:reportId"
             element={<ReportForm />}
           />
           <Route

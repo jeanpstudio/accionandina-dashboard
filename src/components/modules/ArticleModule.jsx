@@ -1,3 +1,15 @@
+/**
+ * MÓDULO: ArticleModule
+ * ---------------------
+ * Gestiona la redacción y previsualización de artículos de largo formato (historias).
+ * 
+ * CARACTERÍSTICAS:
+ * 1. EDITOR INTEGRADO: Utiliza 'RichEditor' para la composición de contenido.
+ * 2. MULTIMEDIA: Gestión de imagen de portada con subida a Supabase.
+ * 3. INTEGRACIÓN CON PRENSA: Permite exportar directamente el artículo como borrador 
+ *    a la 'Sala de Prensa' (tabla press_releases).
+ * 4. EXPORTACIÓN: Genera HTML limpio y estilizado para ser copiado y usado en newsletters o webs.
+ */
 import { useState, useRef } from "react";
 import { supabase } from "../../app/supabase";
 import {

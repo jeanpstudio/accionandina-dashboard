@@ -1,3 +1,13 @@
+/**
+ * COMPONENTE: ProjectForm
+ * -----------------------
+ * Configuración técnica de los paisajes asignados a un socio.
+ * 
+ * IMPORTANCIA DE LOS PARÁMETROS:
+ * - 'start_date' y 'season_duration_months': Determinan el cronograma base.
+ * - 'monthly_photos_target' y 'monthly_posts_target': Definen el umbral 
+ *   para el semáforo de cumplimiento en el dashboard de supervisión.
+ */
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../app/supabase";

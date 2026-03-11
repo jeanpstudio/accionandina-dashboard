@@ -1,3 +1,13 @@
+/**
+ * PESTAÑA: ReportTab
+ * ------------------
+ * Cierre de ciclo: Reflexión introspectiva y métricas de rendimiento mensual.
+ * 
+ * COMPONENTES CLAVE:
+ * 1. REFLEXIÓN CUALITATIVA: Campos para registrar logros, dificultades y aprendizajes del mes.
+ * 2. MÉTRICAS (KPIs): Visualización del porcentaje global de cumplimiento basado en tareas finalizadas.
+ * 3. MODO PRESENTACIÓN: Generador de slides a pantalla completa para revisiones de resultados.
+ */
 import { useState } from "react";
 import { supabase } from "../../app/supabase";
 import {
@@ -164,12 +174,12 @@ export default function ReportTab({
                   {tasks.filter(
                     (t) => t.status !== "COMPLETADO" && t.priority === 1,
                   ).length === 0 && (
-                    <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
-                      <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">
-                        ¡Sin pendientes urgentes!
-                      </p>
-                    </div>
-                  )}
+                      <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
+                        <p className="text-xs font-black text-emerald-700 uppercase tracking-widest">
+                          ¡Sin pendientes urgentes!
+                        </p>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>
@@ -230,8 +240,8 @@ export default function ReportTab({
                         <td className="py-4 font-mono text-xs text-gray-500">
                           {t.daily_logs?.length > 0
                             ? new Date(
-                                t.daily_logs[t.daily_logs.length - 1].date,
-                              ).toLocaleDateString()
+                              t.daily_logs[t.daily_logs.length - 1].date,
+                            ).toLocaleDateString()
                             : t.end_date
                               ? new Date(t.end_date).toLocaleDateString()
                               : "Manual"}

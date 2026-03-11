@@ -1,3 +1,23 @@
+/**
+ * COMPONENTE: PartnerStories (Gestión de Historias)
+ * -----------------------------------------------
+ * El "Content Engine" del dashboard. Centraliza el flujo de narrativa institucional,
+ * desde la materia prima (testimonios) hasta los productos finales (videos, artículos).
+ * 
+ * ARQUITECTURA DE TRABAJO:
+ * 1. BANCO DE HISTORIAS: Repositorio general indexado por mes y socio para consulta histórica.
+ * 2. PLAN DE TRABAJO: Filtro activo de historias seleccionadas para producción inmediata.
+ * 3. PIPELINE DE CONTENIDOS: Integración de módulos especializados para transformar 
+ *    una historia en:
+ *    - Guion de Video (VideoModule)
+ *    - Copy para Redes (SocialModule)
+ *    - Artículo Editorial (ArticleModule)
+ * 
+ * FUNCIONALIDADES:
+ * - Sistema de banderas (Flags): Revisado, Fotos OK, Redactado, Aprobado.
+ * - Exportación a Google Docs: Generación dinámica de HTML para transposición de flujos.
+ * - Rating & Favoritos: Curaduría de contenido para informes anuales.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {

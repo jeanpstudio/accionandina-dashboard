@@ -1,3 +1,20 @@
+/**
+ * COMPONENTE: MeetingsDashboard (Meeting Room)
+ * -------------------------------------------
+ * Sistema centralizado para el agendamiento y seguimiento de reuniones estratégicas.
+ * Actúa como una "Sala de Guerra" donde se registran agendas, participantes y acuerdos.
+ * 
+ * FUNCIONALIDADES CLAVE:
+ * 1. SINCRONIZACIÓN ESPEJO: Al agendar una reunión, el sistema crea automáticamente 
+ *    una tarea en el tablero personal (Personal Tasks) del usuario para garantizar seguimiento.
+ * 2. GESTIÓN DE PARTICIPANTES: Soporta diferentes perfiles (Socio, Donante, Equipo, Externo)
+ *    con visualización de logotipos corporativos.
+ * 3. MÉTRICAS MENSUALES: Panel resumido de horas de coordinación y tipos de contraparte.
+ * 4. ACTAS (Minutas): Espacios dedicados para Agenda (pre-reunión) y Acuerdos (post-reunión).
+ * 
+ * SEGURIDAD:
+ * - Implementa RBAC para diferenciar entre editores de actas y consultores (Read-Only).
+ */
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../app/supabase";
 import { useAuth } from "../../context/AuthContext";

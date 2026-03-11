@@ -1,9 +1,22 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
-import Sidebar from "./Sidebar";
 import { Menu } from "lucide-react";
+import Sidebar from "./Sidebar";
 
+/**
+ * COMPONENTE: MainLayout (Shell Arquitectónico)
+ * -------------------------------------------
+ * Armazón estructural que encapsula la navegación y el flujo de la aplicación.
+ * 
+ * RESPONSIVIDAD "MOBILE-FIRST":
+ * - Implementa un Layout adaptable con Sidebar persistente en Desktop (hidden left) 
+ *   y un Header de acción rápida en Mobile con sistema de overlay para navegación.
+ * 
+ * GESTIÓN DE RUTAS:
+ * - Utiliza <Outlet /> para la inyección dinámica de contenidos basada en el Router.
+ */
 export default function MainLayout() {
+  // Estado para controlar la visibilidad de la Sidebar en dispositivos móviles.
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);

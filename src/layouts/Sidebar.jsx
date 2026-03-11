@@ -1,3 +1,16 @@
+/**
+ * COMPONENTE: Sidebar (Navegación Inteligente)
+ * -------------------------------------------
+ * Barra lateral de navegación con control de acceso dinámico (RBAC).
+ * 
+ * LÓGICA DE VISIBILIDAD:
+ * - Filtra módulos (Gestión, Herramientas, Personal) basándose en las 
+ *   columnas de permisos ('perm_...') de la tabla 'profiles'.
+ * - El rol de 'admin' tiene override total sobre todas las vistas.
+ * 
+ * RESPONSIVIDAD:
+ * - Integra estados 'isOpen' y 'onClose' para comportamiento modal en móviles.
+ */
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -72,9 +85,8 @@ export default function Sidebar({ isOpen, onClose }) {
       )}
 
       <aside
-        className={`w-64 h-screen bg-brand flex flex-col fixed left-0 top-0 border-r border-green-900/50 shadow-2xl overflow-hidden z-50 transition-transform duration-300 transform ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+        className={`w-64 h-screen bg-brand flex flex-col fixed left-0 top-0 border-r border-green-900/50 shadow-2xl overflow-hidden z-50 transition-transform duration-300 transform ${isOpen ? "translate-x-0" : "-translate-x-full"
+          } lg:translate-x-0`}
       >
         {/* 1. HEADER */}
         <div className="p-6 border-b border-green-800/50 bg-black/20 relative">
@@ -123,10 +135,10 @@ export default function Sidebar({ isOpen, onClose }) {
           {(canView("perm_summary") ||
             canView("perm_supervision") ||
             canView("perm_campaigns")) && (
-            <p className="px-4 text-[10px] font-bold text-green-500 uppercase tracking-widest mt-4 mb-2">
-              Gestión Global
-            </p>
-          )}
+              <p className="px-4 text-[10px] font-bold text-green-500 uppercase tracking-widest mt-4 mb-2">
+                Gestión Global
+              </p>
+            )}
 
           {canView("perm_summary") && (
             <Link to="/" className={getLinkClass("/")} onClick={onClose}>
@@ -163,10 +175,10 @@ export default function Sidebar({ isOpen, onClose }) {
             canView("perm_mailing") ||
             canView("perm_videos") ||
             canView("perm_stories")) && (
-            <p className="px-4 text-[10px] font-bold text-green-500 uppercase tracking-widest mt-6 mb-2">
-              Herramientas
-            </p>
-          )}
+              <p className="px-4 text-[10px] font-bold text-green-500 uppercase tracking-widest mt-6 mb-2">
+                Herramientas
+              </p>
+            )}
 
           {canView("perm_press") && (
             <Link

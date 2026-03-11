@@ -1,3 +1,13 @@
+/**
+ * MÓDULO: SocialModule
+ * --------------------
+ * Herramienta de composición para publicaciones en redes sociales (enfocado en Instagram/Facebook).
+ * 
+ * FUNCIONALIDADES:
+ * 1. REDACCIÓN: Campo de texto para el 'copy' con contador de contexto (visual).
+ * 2. HASHTAGS: Input especializado para etiquetas sociales.
+ * 3. MOCKUP DINÁMICO: Previsualización en tiempo real de cómo se vería el post en un dispositivo móvil.
+ */
 import { Hash, Camera } from "lucide-react";
 
 export default function SocialModule({ data, onUpdate }) {

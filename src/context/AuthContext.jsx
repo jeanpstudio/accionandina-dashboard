@@ -1,3 +1,15 @@
+/**
+ * PROVEEDOR: AuthContext (Motor de Sesión Global)
+ * ----------------------------------------------
+ * Gestiona el ciclo de vida de la autenticación en toda la aplicación.
+ * 
+ * FUNCIONALIDADES MOTOR:
+ * 1. PERSISTENCIA: Recupera la sesión activa de Supabase al hidratar la app.
+ * 2. REAL-TIME AUTH: Implementa un 'onAuthStateChange' para reaccionar 
+ *    instantáneamente a inicios/cierres de sesión sin recargar.
+ * 3. ABSTRACCIÓN: Expone el hook 'useAuth' para simplificar el acceso 
+ *    al objeto 'user' y métodos de salida.
+ */
 // Importamos las herramientas de React
 import { createContext, useContext, useEffect, useState } from "react";
 // Importamos nuestra conexión a Supabase

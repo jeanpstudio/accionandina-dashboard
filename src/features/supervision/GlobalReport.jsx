@@ -1,3 +1,15 @@
+/**
+ * COMPONENTE: GlobalReport (KPI Dashboard)
+ * ----------------------------------------
+ * Vista macro de cumplimiento para la dirección de comunicación.
+ * 
+ * LÓGICA DE NEGOCIO:
+ * 1. AGREGACIÓN: Sumariza fotos, posts y videos de toda la red de socios.
+ * 2. CÁLCULO DE SALUD (Health Score): Compara el hit rate real contra la meta 
+ *    específica de cada paisaje, inyectando estados: OK, RETRASO o CRÍTICO.
+ * 3. MULTI-VISTA: Permite alternar entre avance histórico acumulado o 
+ *    filtrado por trimestre para auditorías rápidas.
+ */
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../../app/supabase";

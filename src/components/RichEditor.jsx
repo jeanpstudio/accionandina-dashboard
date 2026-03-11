@@ -1,3 +1,15 @@
+/**
+ * COMPONENTE: RichEditor
+ * ---------------------
+ * Un editor de texto enriquecido (WYSIWYG) personalizado basado en 'contentEditable'.
+ * 
+ * FUNCIONALIDADES:
+ * 1. FORMATO BÁSICO: Negrita, cursiva, subrayado y listas.
+ * 2. MULTIMEDIA: Soporte para inserción de imágenes vía URL o subida directa a Supabase Storage.
+ * 3. SINCRONIZACIÓN: Utiliza un useEffect con refs para evitar el "cursor saltarín" al sincronizar 
+ *    el estado de React con el DOM nativo.
+ * 4. SEGURIDAD: Sanitiza el pegado (paste) de contenido para mantener un HTML limpio.
+ */
 import { useRef, useEffect, useState } from "react";
 import {
   Bold,
@@ -191,8 +203,8 @@ export default function RichEditor({
         className="p-4 outline-none text-sm font-sans text-gray-700 leading-loose overflow-y-auto prose prose-sm max-w-none prose-img:rounded-xl prose-img:shadow-sm"
         style={{ minHeight, maxHeight: "400px" }}
         placeholder={placeholder}
-        // NOTA: Ya no usamos dangerouslySetInnerHTML aquí,
-        // usamos el useEffect de arriba para controlar el contenido.
+      // NOTA: Ya no usamos dangerouslySetInnerHTML aquí,
+      // usamos el useEffect de arriba para controlar el contenido.
       />
     </div>
   );

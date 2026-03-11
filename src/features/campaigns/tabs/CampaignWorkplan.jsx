@@ -1,3 +1,18 @@
+/**
+ * PESTAÑA: CampaignWorkplan
+ * -------------------------
+ * El motor operativo de la campaña. Gestiona el ciclo de vida de cada entregable.
+ * 
+ * LÓGICA DE OPERACIONES:
+ * 1. FASES: Agrupación lógica de tareas (ej. Pre-producción, Lanzamiento). Soporta reordenamiento por Drag & Drop.
+ * 2. TIPOS DE TAREA: Contenido (Social Media), Gestión (Envío de material), Reuniones, Revisión.
+ * 3. SHOTLIST: Lista de verificación táctica dentro de cada tarea de contenido.
+ * 4. DELIVERY TRACKING: Control de subida y revisión de materiales por socio asignado.
+ * 
+ * INTEGRACIONES:
+ * - Buckets de Supabase: Para la subida directa de referencias o artes.
+ * - Previewers dinámicos: Soporta visualización de imágenes, videos y Google Docs in-app.
+ */
 import { useState, useRef } from "react";
 import {
   Plus,

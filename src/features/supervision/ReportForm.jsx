@@ -1,23 +1,48 @@
+/**
+ * COMPONENTE: ReportForm (Motor de Reportabilidad)
+ * -----------------------------------------------
+ * Formulario dinámico e inteligente para la captura de KPIs mensuales.
+ * 
+ * LOGICA "SMART" JIT (Just-In-Time):
+ * 1. PRE-POBLADO: Al crear un reporte, el sistema detecta el último mes registrado y 
+ *    clona automáticamente: Season, Web URL, Social Links y % de avance para minimizar fricción.
+ * 2. VALIDACIÓN DE TEMPORADA: Cruza datos con el 'Chocolateo' Global. Si es mes de Milkywire 
+ *    o hito de Video, el sistema bloquea el envío sin la entrega o su debida justificación.
+ * 3. CAMPOS DINÁMICOS: Inyecta campañas globales configuradas por el Admin en 
+ *    tiempo real.
+ */
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
 import {
+  ArrowLeft,
   Save,
+  Edit,
+  Calendar,
+  Star,
+  CheckCircle2,
   Image as ImageIcon,
   Globe,
-  ArrowLeft,
-  Calendar,
   X,
-  Star,
+  Plus,
   MessageSquare,
-  CheckCircle2,
-  Link as LinkIcon,
-  Clock,
-  Edit,
-  Video, // Icono de video
 } from "lucide-react";
 
+/**
+ * COMPONENTE: ReportForm
+ * ---------------------
+ * Este componente es el formulario dinámico para la creación y edición de reportes mensuales.
+ * Es una de las piezas más complejas del sistema debido a su lógica de "Just-in-Time":
+ * 
+ * CARACTERÍSTICAS CLAVE:
+ * 1. PERSISTENCIA INTELIGENTE: Al crear un nuevo reporte, busca el mes anterior y precarga datos 
+ *    como el porcentaje de avance web y enlaces sociales para ahorrar tiempo al usuario.
+ * 2. RESTRICCIONES REQUERIDAS: Si es mes de entrega de video o Milkywire, el formulario obliga 
+ *    al usuario a registrar el material o justificar la falta.
+ * 3. CAMPOS DINÁMICOS: Las campañas mostradas dependen de la configuración global de la temporada.
+ * */
 export default function ReportForm() {
+  // Parámetros de la URL: projectId siempre presente, reportId solo en modo edición.
   const { projectId, reportId } = useParams();
   const navigate = useNavigate();
 
@@ -25,25 +50,28 @@ export default function ReportForm() {
   const [loading, setLoading] = useState(true);
   const isEditing = Boolean(reportId);
 
-  // Estados temporales
+  // --- ESTADOS TEMPORALES (Buffers para inputs de listas) ---
   const [currentLink, setCurrentLink] = useState("");
   const [tempCamp, setTempCamp] = useState({ title: "", comment: "" });
   const [tempVideo, setTempVideo] = useState({ topic: "", comment: "" });
   const [tempMilky, setTempMilky] = useState({ topic: "", comment: "" });
 
+  // Flags para marcar secciones como "No hubo entrega este mes"
   const [noCamps, setNoCamps] = useState(false);
   const [noVideos, setNoVideos] = useState(false);
   const [noMilky, setNoMilky] = useState(false);
 
-  // Estados para la nueva lógica global
-  const [globalCampaigns, setGlobalCampaigns] = useState([]);
-  const [isMilkyMonth, setIsMilkyMonth] = useState(false);
+  // --- ESTADOS DE CONFIGURACIÓN GLOBAL ---
+  const [globalCampaigns, setGlobalCampaigns] = useState([]); // Campañas de temporada
+  const [partnerCampaigns, setPartnerCampaigns] = useState([]); // Campañas del dashboard de campañas
+  const [isMilkyMonth, setIsMilkyMonth] = useState(false); // ¿A este socio le toca Milkywire hoy?
 
+  // --- MODELO DE DATOS PRINCIPAL (Sincronizado con Supabase 'monthly_reports') ---
   const [formData, setFormData] = useState({
     project_id: projectId,
     report_month: "",
     report_year: new Date().getFullYear(),
-    season_name: "",
+    season_name: "", // Ej: "2025-2026"
     photo_count: 0,
     photo_comment: "",
     post_count: 0,
@@ -53,64 +81,66 @@ export default function ReportForm() {
     web_comment: "",
     video_comment: "",
     campaign_comment: "",
-    season_comment: "",
+    season_comment: "", // Conclusión final
     social_links: [],
-    campaigns: [],
-    videos: [],
+    campaigns: [], // JSONB: [{title, comment}, ...]
+    videos: [],    // JSONB: [{topic, comment}, ...]
     milkywire_material: [],
     milkywire_comment: "",
     is_season_start: false,
     is_last_month: false,
   });
 
+  // Meses donde el equipo de comunicación exige videos de corte.
   const videoMonths = ["Junio", "Octubre", "Marzo"];
   const isVideoMonth = videoMonths.includes(formData?.report_month);
 
   const months = [
-    "Enero",
-    "Febrero",
-    "Marzo",
-    "Abril",
-    "Mayo",
-    "Junio",
-    "Julio",
-    "Agosto",
-    "Septiembre",
-    "Octubre",
-    "Noviembre",
-    "Diciembre",
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
   ];
 
   const seasons = ["2024-2025", "2025-2026", "2026-2027", "2027-2028"];
 
-  // Opciones para el desplegable de Videos
-  const videoCuts = ["Corte 1 (Julio)", "Corte 2 (Octubre)", "Corte 3 (Marzo)"];
-
+  // Sanitización de datos: Asegura que campos JSONB sean siempre arrays para evitar errores de .map()
   const ensureArray = (data) => {
     if (!data) return [];
     if (Array.isArray(data)) return data;
     return [];
   };
 
+  // Carga inicial de datos
   useEffect(() => {
     if (isEditing) fetchReportForEdit();
     else fetchInitialDataForNew();
   }, [projectId, reportId]);
 
-  // Cargar configuraciones globales según año y mes seleccionados
+  // Sincronización Global: Cuando cambia el mes o temporada, re-calculamos si toca Milkywire o qué campañas mostrar.
   useEffect(() => {
     if (formData.season_name && project?.partners?.id) {
       loadGlobalSettings(formData.season_name, project.partners.id, formData.report_month);
     }
   }, [formData.season_name, formData.report_month, project?.partners?.id]);
 
+  /**
+   * loadGlobalSettings: Cruza los datos del reporte actual con las configuraciones del Admin.
+   */
   async function loadGlobalSettings(season, partnerId, currentMonth) {
     try {
-      // 1. Cargar Campañas de esta temporada
+      // 1. Cargamos las campañas que el admin habilitó para esta temporada específica.
       const { data: camps } = await supabase.from("season_campaigns").select("*").eq("season_name", season);
       setGlobalCampaigns(camps || []);
 
-      // 2. Verificar si toca Milkywire a este partner en ESTE mes
+      // 2. Cargamos las campañas específicas del socio (del Dashboard de Campañas)
+      // Buscamos campañas donde esté incluido este partner.
+      const { data: partCamps } = await supabase
+        .from("campaigns")
+        .select("*")
+        .contains("partner_ids", [partnerId]);
+
+      setPartnerCampaigns(partCamps || []);
+
+      // 3. Verificamos el 'Chocolateo': ¿Está este socio agendado para Milkywire en este mes?
       if (currentMonth) {
         const { data: milky } = await supabase.from("milkywire_schedules")
           .select("*")
@@ -126,6 +156,10 @@ export default function ReportForm() {
     }
   }
 
+  /**
+   * fetchInitialDataForNew: "Smart Creation"
+   * Busca el último reporte cronológico de este proyecto para autopoblar el nuevo.
+   */
   async function fetchInitialDataForNew() {
     setLoading(true);
     try {
@@ -136,6 +170,7 @@ export default function ReportForm() {
         .single();
       setProject(projData);
 
+      // Obtenemos el último reporte para heredar configuraciones
       const { data: reports } = await supabase
         .from("monthly_reports")
         .select("*")
@@ -147,6 +182,7 @@ export default function ReportForm() {
         const last = reports[0];
         const lastMonthIndex = months.indexOf(last.report_month);
 
+        // Lógica de avance temporal automático: Si el último fue Enero, el nuevo es Febrero.
         setFormData((prev) => ({
           ...prev,
           season_name: last.season_name || "2025-2026",
@@ -171,6 +207,9 @@ export default function ReportForm() {
     }
   }
 
+  /**
+   * Carga un reporte existente para su edición.
+   */
   async function fetchReportForEdit() {
     setLoading(true);
     try {
@@ -180,6 +219,7 @@ export default function ReportForm() {
         .eq("id", projectId)
         .single();
       setProject(projData);
+
       const { data: report, error } = await supabase
         .from("monthly_reports")
         .select("*")
@@ -195,6 +235,8 @@ export default function ReportForm() {
           videos: ensureArray(report.videos),
           milkywire_material: ensureArray(report.milkywire_material),
         });
+
+        // Marcamos flags de "Sin Entrega" si hay comentario pero no hay items en los arrays
         if (report.video_comment && ensureArray(report.videos).length === 0)
           setNoVideos(true);
         if (
@@ -215,6 +257,9 @@ export default function ReportForm() {
     }
   }
 
+  /**
+   * Añade una URL a la lista de enlaces sociales del reporte.
+   */
   const addSocialLink = () => {
     if (currentLink.trim()) {
       setFormData((prev) => ({
@@ -225,6 +270,9 @@ export default function ReportForm() {
     }
   };
 
+  /**
+   * addItem: Añade un nuevo item (Video/Campaña/Milkywire) a su respectiva lista JSONB.
+   */
   const addItem = (type, tempData, setTemp, field) => {
     if (tempData[field]?.trim()) {
       let newItem = { ...tempData };
@@ -233,13 +281,17 @@ export default function ReportForm() {
         [type]: [...ensureArray(prev[type]), newItem],
       }));
 
-      // Limpieza dependiente del tipo
+      // Limpieza del buffer temporal según el tipo de dato
       if (type === "videos") setTemp({ topic: "", comment: "" });
       else if (type === "milkywire_material") setTemp({ topic: "", comment: "" });
       else setTemp({ title: "", comment: "" });
     }
   };
 
+  /**
+   * handleToggleCampaign: Gestión de los checkboxes de campañas globales.
+   * Si se marca, se añade al array de campañas del reporte. Si se desmarca, se elimina.
+   */
   const handleToggleCampaign = (campTitle) => {
     const currentCamps = ensureArray(formData.campaigns);
     const exists = currentCamps.some(c => c.title === campTitle);
@@ -257,6 +309,9 @@ export default function ReportForm() {
     }
   };
 
+  /**
+   * Actualiza el comentario específico de una participación en campaña global.
+   */
   const updateCampaignComment = (campTitle, text) => {
     const updated = ensureArray(formData.campaigns).map(c => {
       if (c.title === campTitle) return { ...c, comment: text };
@@ -265,51 +320,61 @@ export default function ReportForm() {
     setFormData(prev => ({ ...prev, campaigns: updated }));
   };
 
-  // Función para editar campos específicos de un video/milky ya agregado (eliminamos lógicas fijas de fechas)
+  /**
+   * updateGenericField: Utilidad para editar campos dentro de objetos anidados en arrays JSONB.
+   */
   const updateGenericField = (type, index, field, value) => {
     const updated = [...ensureArray(formData[type])];
     updated[index] = { ...updated[index], [field]: value };
     setFormData((prev) => ({ ...prev, [type]: updated }));
   };
 
-  // --- ENVÍO DEL REPORTE ---
+  // --- ENVÍO DEL REPORTE (LÓGICA DE NEGOCIO Y VALIDACIÓN) ---
+
+  /**
+   * handleSubmit: Procesa el guardado del reporte con validaciones estrictas de temporada.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // 1. VALIDACIONES OBLIGATORIAS
-      // Verificamos si en mes de entrega de video (isVideoMonth) o asignación milky (isMilkyMonth)
-      // se ha omitido el material sin dejar una justificación.
+      // 1. VALIDACIONES DE NEGOCIO (REGLAS DE COMUNICACIÓN)
+      // Si el equipo comunicó que es mes de video o Milkywire, el socio NO puede dejar el reporte vacío
+      // sin al menos explicar por qué no se cumplió la entrega.
 
+      // Regla de Video (Meses fijos: Junio, Octubre, Marzo)
       if (isVideoMonth && ensureArray(formData.videos).length === 0 && !formData.video_comment?.trim()) {
         throw new Error("⚠️ Es mes de entrega de Video (Junio/Octubre/Marzo). Debes registrar el video o dejar una justificación obligatoria.");
       }
 
+      // Regla de Milkywire (Basada en el Chocolateo Admin)
       if (isMilkyMonth && ensureArray(formData.milkywire_material).length === 0 && !formData.milkywire_comment?.trim()) {
         throw new Error("⚠️ Estás asignado para Milkywire este mes. Debes registrar el material o dejar una justificación obligatoria.");
       }
 
-      // 2. PREPARACIÓN DE DATOS PARA SUPABASE (JSONB)
+      // 2. PREPARACIÓN FINAL DE DATOS
       const dataToSave = {
         ...formData,
         project_id: projectId,
-        // Limpiamos nulos o undefined
+        // Sanitización final: Nos aseguramos de que no viajen nulos a los campos JSONB
         social_links: ensureArray(formData.social_links),
         campaigns: ensureArray(formData.campaigns),
         videos: ensureArray(formData.videos),
         milkywire_material: ensureArray(formData.milkywire_material),
       };
 
-      // 3. OPERACIÓN DE BASE DE DATOS
+      // 3. PERSISTENCIA EN SUPABASE
       let error;
       if (isEditing) {
+        // Modo Edición: UPDATE
         const { error: updErr } = await supabase
           .from("monthly_reports")
           .update(dataToSave)
           .eq("id", reportId);
         error = updErr;
       } else {
+        // Modo Creación: INSERT
         const { error: insErr } = await supabase
           .from("monthly_reports")
           .insert([dataToSave]);
@@ -327,6 +392,9 @@ export default function ReportForm() {
     }
   };
 
+  /**
+   * UI: Estado de Carga
+   */
   if (loading)
     return (
       <div className="p-20 text-center text-brand font-black animate-pulse uppercase tracking-widest">
@@ -621,6 +689,9 @@ export default function ReportForm() {
           {/* =======================================================
               CAMPAÑAS GLOBALES (Reescrito)
              ======================================================= */}
+          {/* =======================================================
+              1. CAMPAÑAS DE TEMPORADA
+             ======================================================= */}
           <div className="space-y-4 pt-8 border-t border-gray-50 first:pt-0 first:border-0">
             <div className="flex justify-between items-center">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -628,13 +699,14 @@ export default function ReportForm() {
               </label>
             </div>
 
-            {globalCampaigns.length === 0 ? (
-              <div className="bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 text-center">
-                <p className="text-[10px] uppercase font-bold text-gray-400">No hay campañas configuradas globalmente para {formData.season_name}</p>
-              </div>
-            ) : (
-              <div className="space-y-3 bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-100">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">¿Participaste en alguna de estas campañas apoyando el esfuerzo de red? Marca la casilla y deja tu link/comentario.</p>
+            {/* SECCIÓN A: Campañas Globales (Configuradas por Admin) */}
+            {(globalCampaigns.length > 0 || partnerCampaigns.length > 0) && (
+              <div className="space-y-3 bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-100 mb-4">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 italic">
+                  Selecciona de la lista de campañas activas:
+                </p>
+
+                {/* 1. Campañas Globales de Temporada */}
                 {globalCampaigns.map(camp => {
                   const isChecked = ensureArray(formData.campaigns).some(c => c.title === camp.title);
                   const currentCampData = ensureArray(formData.campaigns).find(c => c.title === camp.title);
@@ -648,12 +720,15 @@ export default function ReportForm() {
                           checked={isChecked}
                           onChange={() => handleToggleCampaign(camp.title)}
                         />
-                        <span className={`text-sm font-black uppercase ${isChecked ? "text-brand" : "text-gray-600"}`}>{camp.title}</span>
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-black uppercase ${isChecked ? "text-brand" : "text-gray-600"}`}>{camp.title}</span>
+                          <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Global AA</span>
+                        </div>
                       </label>
 
                       {isChecked && (
                         <textarea
-                          placeholder="Pega los links o deja un comentario sobre la participación..."
+                          placeholder="Link de post o breve descripción de participación..."
                           className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
                           rows="2"
                           value={currentCampData?.comment || ""}
@@ -661,10 +736,86 @@ export default function ReportForm() {
                         />
                       )}
                     </div>
-                  )
+                  );
+                })}
+
+                {/* 2. Campañas Específicas del Socio */}
+                {partnerCampaigns.map(camp => {
+                  const isChecked = ensureArray(formData.campaigns).some(c => c.title === camp.title);
+                  const currentCampData = ensureArray(formData.campaigns).find(c => c.title === camp.title);
+
+                  return (
+                    <div key={camp.id} className={`p-4 rounded-xl border-2 transition-all ${isChecked ? "bg-white border-blue-500 shadow-sm" : "bg-white/50 border-gray-100 hover:border-gray-300"}`}>
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 accent-blue-500"
+                          checked={isChecked}
+                          onChange={() => handleToggleCampaign(camp.title)}
+                        />
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-black uppercase ${isChecked ? "text-blue-600" : "text-gray-600"}`}>{camp.title}</span>
+                          <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Específica Socio</span>
+                        </div>
+                      </label>
+
+                      {isChecked && (
+                        <textarea
+                          placeholder="Detalle de ejecución o resultados..."
+                          className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
+                          rows="2"
+                          value={currentCampData?.comment || ""}
+                          onChange={(e) => updateCampaignComment(camp.title, e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
                 })}
               </div>
             )}
+
+            {/* SECCIÓN B: Carga Manual (Para campañas no listadas o históricas) */}
+            <div className="bg-brand/5 p-6 rounded-2xl border border-brand/10 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand/60 pl-1">
+                ¿Otra campaña o evento? (Carga Manual)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nombre de la campaña..."
+                  className="flex-1 bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
+                  value={tempCamp.title}
+                  onChange={(e) => setTempCamp(p => ({ ...p, title: e.target.value }))}
+                />
+              </div>
+              <textarea
+                placeholder="Detalle de participación o links..."
+                className="w-full bg-white border-none rounded-xl p-4 text-xs italic font-medium outline-none text-gray-700 shadow-sm"
+                rows="2"
+                value={tempCamp.comment}
+                onChange={(e) => setTempCamp(p => ({ ...p, comment: e.target.value }))}
+              />
+              <button
+                type="button"
+                onClick={() => addItem("campaigns", tempCamp, setTempCamp, "title")}
+                className="w-full py-3 bg-brand/10 text-brand text-[10px] font-black rounded-xl uppercase tracking-[0.1em] hover:bg-brand hover:text-white transition-all border border-brand/20"
+              >
+                + Agregar Campaña Manual
+              </button>
+            </div>
+
+            {/* SECCIÓN C: Comentario General de Campañas (Siempre habilitado) */}
+            <div className="space-y-2 pt-4">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">
+                Conclusión / Comentario General de Campañas del Mes
+              </label>
+              <textarea
+                placeholder="Resumen general de las campañas de este mes..."
+                className="w-full bg-gray-50 rounded-2xl p-5 text-sm italic min-h-[100px] outline-none shadow-inner border border-gray-100"
+                value={formData.campaign_comment}
+                onChange={(e) => setFormData(p => ({ ...p, campaign_comment: e.target.value }))}
+              />
+            </div>
           </div>
 
 
@@ -715,10 +866,11 @@ export default function ReportForm() {
                   </span>
                 </label>
 
+                {/* Switch de "Sin Entrega" para modo justificación */}
                 <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100/30">
                   <input
                     type="checkbox"
-                    className="accent-red-500 scale-110"
+                    className="accent-red-500 scale-110 cursor-pointer"
                     checked={sec.no}
                     onChange={(e) => sec.setNo(e.target.checked)}
                   />
@@ -728,88 +880,88 @@ export default function ReportForm() {
                 </div>
               </div>
 
-              {!sec.no ? (
-                <div className="bg-gray-50 p-6 rounded-2xl space-y-3 shadow-inner">
-                  <input
-                    type="text"
-                    placeholder={`Link del archivo o Nombre del entregable...`}
-                    className="w-full bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
-                    value={sec.temp[sec.field]}
-                    onChange={(e) =>
-                      sec.setTemp((p) => ({
-                        ...p,
-                        [sec.field]: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addItem(sec.id, sec.temp, sec.setTemp, sec.field)
-                    }
-                    className="w-full py-3 bg-brand text-white text-[10px] font-black rounded-xl uppercase tracking-[0.1em] active:scale-95 transition-all shadow-md"
-                  >
-                    + Registrar Entregable
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <textarea
-                    placeholder={sec.isSpecialMonth ? "Indica obligatoriamente el motivo por el que no se llegó a la cuota este mes..." : "Motivo (Opcional)..."}
-                    className={`w-full bg-red-50 border-2 rounded-2xl p-4 text-sm italic outline-none ${sec.isSpecialMonth && !formData[sec.commentField]?.trim() ? "border-red-400 text-red-900" : "border-red-100/20 text-red-800"}`}
-                    value={formData[sec.commentField]}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        [sec.commentField]: e.target.value,
-                      }))
-                    }
-                  />
-                  {sec.isSpecialMonth && !formData[sec.commentField]?.trim() && (
-                    <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest pl-2 font-black">* Justificación Requerida para guardar el reporte.</p>
-                  )}
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {Array.isArray(formData[sec.id]) &&
-                  formData[sec.id].map((item, i) => (
-                    <div
-                      key={i}
-                      className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"
+              {/* ÁREA DE CARGA MANUAL (Ahora siempre disponible o por toggle) */}
+              <div className="bg-gray-50 p-6 rounded-2xl space-y-3 shadow-inner border border-gray-100">
+                {!sec.no ? (
+                  <>
+                    <input
+                      type="text"
+                      placeholder={`Link o Nombre del material...`}
+                      className="w-full bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
+                      value={sec.temp[sec.field]}
+                      onChange={(e) =>
+                        sec.setTemp((p) => ({
+                          ...p,
+                          [sec.field]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        addItem(sec.id, sec.temp, sec.setTemp, sec.field)
+                      }
+                      className="w-full py-3 bg-brand text-white text-[10px] font-black rounded-xl uppercase tracking-[0.1em] active:scale-95 hover:brightness-110 transition-all shadow-md"
                     >
-                      <div className="flex justify-between items-center p-4 bg-gray-50/50">
-                        <span className="text-xs font-black text-gray-800 uppercase">
-                          {item[sec.field]}
-                        </span>
-                        <X
-                          size={16}
-                          className="cursor-pointer text-gray-400 hover:text-red-500"
-                          onClick={() =>
-                            setFormData((p) => ({
-                              ...p,
-                              [sec.id]: p[sec.id].filter((_, idx) => idx !== i),
-                            }))
-                          }
-                        />
+                      + Registrar Entrega Manual
+                    </button>
+                    {/* Visualización de items cargados con inputs para detalles adicionales */}
+                    {ensureArray(formData[sec.id]).length > 0 && (
+                      <div className="space-y-3 mt-6">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Entregas Registradas:</p>
+                        {ensureArray(formData[sec.id]).map((item, idx) => (
+                          <div key={idx} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2">
+                            <div className="flex justify-between items-center p-3 bg-gray-50/50">
+                              <span className="text-[10px] font-black text-brand uppercase truncate max-w-[80%]">
+                                {item[sec.field]}
+                              </span>
+                              <X
+                                size={14}
+                                className="cursor-pointer text-gray-300 hover:text-red-500 transition-colors"
+                                onClick={() => {
+                                  const updated = ensureArray(formData[sec.id]).filter((_, i) => i !== idx);
+                                  setFormData(p => ({ ...p, [sec.id]: updated }));
+                                }}
+                              />
+                            </div>
+                            <div className="p-3 bg-white">
+                              <textarea
+                                placeholder="Añadir links de respaldo, descripción o notas..."
+                                className="w-full bg-gray-50 border-none rounded-lg p-2 text-[11px] italic font-medium outline-none text-gray-600 min-h-[50px] resize-none"
+                                value={item.comment || ""}
+                                onChange={(e) => updateGenericField(sec.id, idx, "comment", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="px-4 pb-4 bg-gray-50/50">
-                        <input
-                          type="text"
-                          placeholder="Notas, detalles o links anexos..."
-                          className="w-full bg-white border border-gray-200 rounded-lg p-3 text-xs italic font-medium outline-none"
-                          value={item.comment || ""}
-                          onChange={(e) => updateGenericField(sec.id, i, "comment", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-red-500/70 uppercase mb-2 pl-1 italic">Modo Justificación Activado</p>
+                    <textarea
+                      placeholder={sec.isSpecialMonth ? "Indica obligatoriamente el motivo por el que NO se cumplió la entrega este mes..." : "Motivo (Opcional)..."}
+                      className={`w-full bg-red-50 border-2 rounded-2xl p-4 text-sm italic outline-none transition-all ${sec.isSpecialMonth && !formData[sec.commentField]?.trim() ? "border-red-400 text-red-900" : "border-red-100/20 text-red-800"}`}
+                      value={formData[sec.commentField]}
+                      onChange={(e) =>
+                        setFormData((p) => ({
+                          ...p,
+                          [sec.commentField]: e.target.value,
+                        }))
+                      }
+                    />
+                    {sec.isSpecialMonth && !formData[sec.commentField]?.trim() && (
+                      <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest pl-2 animate-pulse">* Justificación Requerida para guardar el reporte.</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* COLUMNA 3 */}
+        {/* COLUMNA 3: NOTA FINAL */}
         <div className="bg-white p-6 md:p-8 rounded-[32px] border-2 border-brand/5 shadow-sm space-y-6 bg-gradient-to-br from-white to-gray-50/30">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-brand/10 rounded-2xl text-brand">

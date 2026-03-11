@@ -1,3 +1,18 @@
+/**
+ * COMPONENTE: HomeDashboard (Comando Central)
+ * ------------------------------------------
+ * Vista ejecutiva que consolida la salud operativa de toda la plataforma.
+ * 
+ * MÓDULOS CRÍTICOS:
+ * 1. KPI TRACKER: Cálculo en tiempo real del % de ejecución global promediando 
+ *    los reportes de todos los paisajes activos.
+ * 2. AUDITORÍA INTELIGENTE: Algoritmo que detecta anomalías (Falta de cierres, 
+ *    desvío en rendimiento/semáforo, ausencia de videos en cortes trimestrales).
+ * 3. GESTIÓN AGIL: Quick-tasks y agenda integrada para la toma de acciones inmediatas.
+ * 
+ * SEGURIDAD & RBAC:
+ * - Sincroniza permisos de edición basados en el rol del perfil de Supabase.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import { Link } from "react-router-dom";

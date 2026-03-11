@@ -1,3 +1,14 @@
+/**
+ * PESTAÑA: ExecutionTab
+ * ---------------------
+ * El "Daily Dashboard": Gestión del trabajo en tiempo real día por día.
+ * 
+ * CARACTERÍSTICAS PRINCIPALES:
+ * 1. VISTA DE CALENDARIO: Visualización de 4 días consecutivos con navegación temporal.
+ * 2. GESTIÓN DE PROGRESO: Control detallado de subtareas, horas estimadas y porcentaje de avance.
+ * 3. BITÁCORA DIARIA: Notas rápidas y enlaces de recursos asociados a fechas específicas.
+ * 4. PREVIEW DE DOCS: Integración con IFrames para visualizar documentos de Google Drive directamente.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {

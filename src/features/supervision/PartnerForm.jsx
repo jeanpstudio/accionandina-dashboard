@@ -1,3 +1,9 @@
+/**
+ * COMPONENTE: PartnerForm
+ * -----------------------
+ * Punto de entrada para el registro de ONGs socias.
+ * Gestiona metadatos básicos como nombre, país y logo para branding en reportes.
+ */
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../app/supabase";

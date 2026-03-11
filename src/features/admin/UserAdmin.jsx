@@ -1,18 +1,24 @@
+/**
+ * COMPONENTE: UserAdmin
+ * --------------------
+ * Este es el centro de seguridad y administración de usuarios del ecosistema.
+ * Permite configurar permisos granulares mes a mes para cada módulo del dashboard.
+ * 
+ * LÓGICA DE PERMISOS:
+ * Cada módulo (Supervisión, Campañas, Prensa, etc.) tiene dos banderas:
+ * 1. PERM (perm_): Permite ver el contenido del módulo.
+ * 2. EDIT (edit_): Permite realizar cambios, borrar o crear contenido.
+ * 
+ * SISTEMA DE ASIGNACIÓN:
+ * - SOCIO (partner_id): Vincula al usuario con una organización específica.
+ * - PROYECTOS (user_project_access): Determina qué paisajes específicos puede ver el usuario.
+ * 
+ * SEGURIDAD:
+ * Implementa una cascada de permisos: habilitar edición habilita visualización automáticamente.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {
-  Users,
-  Shield,
-  Briefcase,
-  CheckCircle2,
-  Search,
-  Loader2,
-  UserCog,
-  Plus,
-  X,
-  Mail,
-  Lock,
-  Building2,
   LayoutDashboard,
   Eye,
   Megaphone,
@@ -21,92 +27,85 @@ import {
   Send,
   Video,
   BookOpen,
-  Edit3,
+  UserCog,
+  Search,
+  Plus,
+  Building2,
+  Shield,
+  Briefcase,
+  CheckCircle2,
+  X,
+  Loader2,
 } from "lucide-react";
 
+/**
+ * COMPONENTE: UserAdmin
+ * --------------------
+ * Este es el centro de seguridad y administración de usuarios del ecosistema.
+ * Permite configurar permisos granulares mes a mes para cada módulo del dashboard.
+ * 
+ * LÓGICA DE PERMISOS:
+ * Cada módulo (Supervisión, Campañas, Prensa, etc.) tiene dos banderas:
+ * 1. PERM (perm_): Permite ver el contenido del módulo.
+ * 2. EDIT (edit_): Permite realizar cambios, borrar o crear contenido.
+ * 
+ * SISTEMA DE ASIGNACIÓN:
+ * - SOCIO (partner_id): Vincula al usuario con una organización específica.
+ * - PROYECTOS (user_project_access): Determina qué paisajes específicos puede ver el usuario.
+ * */
 export default function UserAdmin() {
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [partners, setPartners] = useState([]);
+  const [users, setUsers] = useState([]); // Perfiles cargados de la tabla 'profiles'
+  const [projects, setProjects] = useState([]); // Todos los proyectos del sistema
+  const [partners, setPartners] = useState([]); // Todos los socios activos
+
+  /**
+   * accessMap: Diccionario optimizado para búsqueda rápida. 
+   * Formato: { [userId]: [projectId1, projectId2, ...] }
+   */
   const [accessMap, setAccessMap] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Inputs nuevo usuario
+  // Buffer para el modal de nuevo usuario
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPass, setNewUserPass] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // --- CONFIGURACIÓN DE MÓDULOS (PARES DE COLUMNAS) ---
+  /**
+   * DEFINICIÓN DE MÓDULOS DEL SISTEMA
+   * Se utiliza este array para renderizar dinámicamente los controles de permisos
+   * y garantizar que la lógica de toggle sea consistente en todo el dashboard.
+   */
   const modules = [
-    {
-      label: "Resumen",
-      viewCol: "perm_summary",
-      editCol: "edit_summary",
-      icon: LayoutDashboard,
-    },
-    {
-      label: "Supervisión",
-      viewCol: "perm_supervision",
-      editCol: "edit_supervision",
-      icon: Eye,
-    },
-    {
-      label: "Campañas",
-      viewCol: "perm_campaigns",
-      editCol: "edit_campaigns",
-      icon: Megaphone,
-    },
-    {
-      label: "Sala de Prensa",
-      viewCol: "perm_press",
-      editCol: "edit_press",
-      icon: Newspaper,
-    },
-    {
-      label: "Reuniones",
-      viewCol: "perm_meetings",
-      editCol: "edit_meetings",
-      icon: Calendar,
-    },
-    {
-      label: "Mailing HTML",
-      viewCol: "perm_mailing",
-      editCol: "edit_mailing",
-      icon: Send,
-    },
-    {
-      label: "Videos / Guiones",
-      viewCol: "perm_videos",
-      editCol: "edit_videos",
-      icon: Video,
-    },
-    {
-      label: "Banco Historias",
-      viewCol: "perm_stories",
-      editCol: "edit_stories",
-      icon: BookOpen,
-    },
-    {
-      label: "Gestión Usuarios",
-      viewCol: "perm_admin_users",
-      editCol: "edit_admin_users",
-      icon: UserCog,
-    },
+    { label: "Resumen", viewCol: "perm_summary", editCol: "edit_summary", icon: LayoutDashboard },
+    { label: "Supervisión", viewCol: "perm_supervision", editCol: "edit_supervision", icon: Eye },
+    { label: "Campañas", viewCol: "perm_campaigns", editCol: "edit_campaigns", icon: Megaphone },
+    { label: "Sala de Prensa", viewCol: "perm_press", editCol: "edit_press", icon: Newspaper },
+    { label: "Reuniones", viewCol: "perm_meetings", editCol: "edit_meetings", icon: Calendar },
+    { label: "Mailing HTML", viewCol: "perm_mailing", editCol: "edit_mailing", icon: Send },
+    { label: "Videos / Guiones", viewCol: "perm_videos", editCol: "edit_videos", icon: Video },
+    { label: "Banco Historias", viewCol: "perm_stories", editCol: "edit_stories", icon: BookOpen },
+    { label: "Gestión Usuarios", viewCol: "perm_admin_users", editCol: "edit_admin_users", icon: UserCog },
   ];
 
   useEffect(() => {
     fetchData();
   }, []);
 
+  /**
+   * fetchData: Carga masiva de toda la infraestructura de seguridad.
+   */
   async function fetchData() {
     setLoading(true);
     try {
+      // 1. Cargamos perfiles de usuario
       const { data: usersData } = await supabase
         .from("profiles")
         .select("*, partners(name)")
         .order("created_at", { ascending: false });
+
+      // 2. Cargamos el catálogo de proyectos y socios
       const { data: projData } = await supabase
         .from("projects")
         .select("id, name, partners(name)");
@@ -115,10 +114,13 @@ export default function UserAdmin() {
         .select("id, name")
         .eq("is_active", true)
         .order("name", { ascending: true });
+
+      // 3. Cargamos la tabla puente de accesos granulares
       const { data: accessData } = await supabase
         .from("user_project_access")
         .select("*");
 
+      // Construimos el mapa de acceso en memoria para evitar consultas repetitivas
       const map = {};
       accessData?.forEach((item) => {
         if (!map[item.user_id]) map[item.user_id] = [];
@@ -136,7 +138,12 @@ export default function UserAdmin() {
     }
   }
 
-  // --- CAMBIAR PERMISO (VER O EDITAR) ---
+  /**
+   * togglePermission: Cambia un permiso específico (Ver o Editar).
+   * Implementa REGLAS DE SEGURIDAD AUTOMÁTICAS:
+   * - Si habilitas EDITAR, automáticamente se habilita VER.
+   * - Si deshabilitas VER, automáticamente se deshabilita EDITAR.
+   */
   const togglePermission = async (
     userId,
     column,
@@ -146,15 +153,15 @@ export default function UserAdmin() {
     const newValue = !currentValue;
     const updates = { [column]: newValue };
 
-    // Si activas EDITAR, automáticamente activa VER
+    // Cascada de permisos: No puedes editar lo que no puedes ver.
     if (column.startsWith("edit_") && newValue === true && dependentColumn) {
       updates[dependentColumn] = true;
     }
-    // Si desactivas VER, automáticamente desactiva EDITAR
     if (column.startsWith("perm_") && newValue === false && dependentColumn) {
       updates[dependentColumn] = false;
     }
 
+    // Actualización optimista en el estado y persistencia en DB
     setUsers(users.map((u) => (u.id === userId ? { ...u, ...updates } : u)));
     await supabase.from("profiles").update(updates).eq("id", userId);
   };

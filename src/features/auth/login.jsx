@@ -1,3 +1,13 @@
+/**
+ * COMPONENTE: Login (Gateway de Acceso)
+ * ------------------------------------
+ * Punto de entrada único para la autenticación de usuarios.
+ * 
+ * SEGURIDAD:
+ * - Utiliza Supabase Auth (Sign In with Password).
+ * - Manejo de estados de carga y errores de red/credenciales.
+ * - Redirección automática al Home tras validación exitosa.
+ */
 // Importamos Hooks de React
 import { useState } from "react";
 // Importamos el hook para navegar a otra página
@@ -102,11 +112,10 @@ export default function Login() {
             type="submit"
             disabled={loading} //se bloquea cuando carga
             className={`w-full font-bold py-3 px-4 rounded-lg transition-colors shadow-lg text-white
-    ${
-      loading
-        ? "bg-gray-400 cursor-not-allowed"
-        : "bg-brand hover:bg-brand-light"
-    }`}
+    ${loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-brand hover:bg-brand-light"
+              }`}
           >
             {loading ? "Entrando..." : "Iniciar Sesión"}
           </button>

@@ -1,42 +1,60 @@
+/**
+ * COMPONENTE: CampaignsDashboard
+ * ----------------------------
+ * El centro neurálgico para la gestión estratégica de campañas de comunicación.
+ * Implementa una interfaz tipo KANBAN para la progresión de estados y un editor
+ * profundo para la planificación táctica.
+ * 
+ * ARQUITECTURA:
+ * 1. TABLERO KANBAN: Gestión visual de estados (Ideación -> Publicado) con Drag & Drop.
+ * 2. EDITOR MAESTRO: Panel persistente inferior que se activa al seleccionar una campaña.
+ * 3. RBAC (Acceso basado en roles): Controla quién puede mover campañas o editar presupuestos.
+ * 
+ * FLUJO DE DATOS:
+ * - Filtro de Socio: Permite ver campañas específicas de un partner o la visión global.
+ * - Sincronización en Vivo: Uso de liveUpdate para persistencia inmediata en Supabase.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {
   Layout,
+  Lock,
   Filter,
   Plus,
   MousePointer2,
-  Trash2,
-  X,
   CheckSquare,
   Lightbulb,
-  BarChart3,
-  Lock,
   FileDown,
+  Trash2,
+  X,
 } from "lucide-react";
-
-// Módulos Hijos
+import AlertsCenter from "./components/AlertsCenter";
 import CampaignWorkplan from "./tabs/CampaignWorkplan";
 import CampaignStrategy from "./tabs/CampaignStrategy";
 import CampaignConfig from "./tabs/CampaignConfig";
-// NUEVO IMPORT
-import AlertsCenter from "./components/AlertsCenter";
-
 export default function CampaignsDashboard() {
-  // ... (Toda la lógica de estado, useEffect y handlers se mantiene IGUAL que antes) ...
-  const [campaigns, setCampaigns] = useState([]);
-  const [partners, setPartners] = useState([]);
+  // --- ESTADOS DE DATOS ---
+  const [campaigns, setCampaigns] = useState([]); // Lista maestra de campañas
+  const [partners, setPartners] = useState([]);    // Lista de socios para asignación
   const [loading, setLoading] = useState(true);
-  const [isReadOnly, setIsReadOnly] = useState(true);
-  const [selectedCampaignId, setSelectedCampaignId] = useState(null);
-  const [activeTab, setActiveTab] = useState("workplan");
-  const [partnerFilter, setPartnerFilter] = useState("ALL");
+  const [isReadOnly, setIsReadOnly] = useState(true); // RBAC: Determina si el usuario puede editar campañas
+
+  // --- ESTADOS DE NAVEGACIÓN INTERNA ---
+  const [selectedCampaignId, setSelectedCampaignId] = useState(null); // ID de la campaña en el editor ("NEW" para creación)
+  const [activeTab, setActiveTab] = useState("workplan"); // Pestaña del panel de detalle
+  const [partnerFilter, setPartnerFilter] = useState("ALL"); // Filtro global por socio
+
+  // Buffer de datos para el formulario de edición
   const [formData, setFormData] = useState(initialFormState());
 
+  /**
+   * initialFormState: Estructura del objeto de campaña según esquema de Supabase.
+   */
   function initialFormState() {
     return {
       title: "",
       description: "",
-      status: "IDEACION",
+      status: "IDEACION", // IDEACION | PRODUCCION | REVISION | PROGRAMADO | PUBLICADO
       priority: "MEDIA",
       start_date: "",
       end_date: "",
@@ -60,8 +78,12 @@ export default function CampaignsDashboard() {
     fetchDataAndPermissions();
   }, []);
 
+  /**
+   * fetchDataAndPermissions: 
+   * 1. Verifica si el usuario actual tiene rol de 'admin' o permiso explícito 'edit_campaigns'.
+   * 2. Descarga la lista completa de campañas y socios activos.
+   */
   async function fetchDataAndPermissions() {
-    // ... (Lógica de fetch igual) ...
     setLoading(true);
     try {
       const {
@@ -96,7 +118,9 @@ export default function CampaignsDashboard() {
     }
   }
 
-  // ... (Handlers handleSelectCampaign, handleCreateNew, etc. IGUALES) ...
+  /**
+   * Selecciona una campaña para abrir el editor inferior.
+   */
   const handleSelectCampaign = (campaign) => {
     if (selectedCampaignId === campaign.id) {
       handleClosePanel();
@@ -107,6 +131,9 @@ export default function CampaignsDashboard() {
     setActiveTab("workplan");
   };
 
+  /**
+   * Prepara el editor para crear una nueva campaña desde cero.
+   */
   const handleCreateNew = () => {
     if (isReadOnly) return;
     setSelectedCampaignId("NEW");
@@ -114,14 +141,23 @@ export default function CampaignsDashboard() {
     setActiveTab("general");
   };
 
+  /**
+   * Cierra el panel de edición inferior.
+   */
   const handleClosePanel = () => {
     setSelectedCampaignId(null);
     setFormData(initialFormState());
   };
 
+  /**
+   * liveUpdate: Permite actualizar campos individuales en tiempo real tanto en 
+   * el estado local como en Supabase para una experiencia sin botones de "Guardar" manuales.
+   */
   const liveUpdate = async (field, newData) => {
     if (isReadOnly) return;
     setFormData((prev) => ({ ...prev, [field]: newData }));
+
+    // Si estamos editando una campaña existente, persistimos el cambio de inmediato
     if (selectedCampaignId && selectedCampaignId !== "NEW") {
       setCampaigns((prev) =>
         prev.map((c) =>
@@ -135,13 +171,20 @@ export default function CampaignsDashboard() {
     }
   };
 
+  /**
+   * handleSaveFull: Guarda todos los cambios del formulario. 
+   * Usado principalmente para creación (NEW) o actualizaciones masivas de presupuesto.
+   */
   const handleSaveFull = async () => {
     if (isReadOnly) return;
     const payload = { ...formData };
+
+    // Recalcula el presupuesto total sumando todas las líneas de detalle
     payload.budget = (payload.budget_details || []).reduce(
       (acc, item) => acc + parseFloat(item.amount || 0),
       0,
     );
+
     if (selectedCampaignId === "NEW") {
       const { error } = await supabase.from("campaigns").insert([payload]);
       if (error) alert(error.message);
@@ -157,6 +200,9 @@ export default function CampaignsDashboard() {
     }
   };
 
+  /**
+   * Elimina la campaña actual (Confirmación obligatoria).
+   */
   const handleDelete = async () => {
     if (isReadOnly || !confirm("¿Eliminar campaña?")) return;
     await supabase.from("campaigns").delete().eq("id", selectedCampaignId);

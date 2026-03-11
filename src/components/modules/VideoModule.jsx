@@ -1,3 +1,14 @@
+/**
+ * MÓDULO: VideoModule
+ * -------------------
+ * Facilita la pre-producción de contenido audiovisual para los paisajes.
+ * 
+ * COMPONENTES DEL FLUJO:
+ * 1. GUION (SCRIPT): Área de texto para narrativa y locución.
+ * 2. STORYBOARD: Lista dinámica para definir las tomas necesarias.
+ * 3. MOODBOARD: Galería de imágenes de referencia (subida a Storage).
+ * 4. INTEGRACIÓN CON PRODUCCIÓN: Exportar el guion y tomas como un nuevo proyecto de video (tabla videos).
+ */
 import { useState, useRef } from "react";
 import { supabase } from "../../app/supabase";
 import {

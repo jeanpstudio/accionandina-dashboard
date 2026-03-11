@@ -1,3 +1,14 @@
+/**
+ * COMPONENTE: AlertsCenter
+ * ------------------------
+ * Sistema inteligente de notificaciones que monitorea la salud de las campañas.
+ * 
+ * FUNCIONALIDADES:
+ * 1. ESCANEO DE SALUD: Detecta socios sin tareas, materiales no subidos y fechas vencidas.
+ * 2. PORTALES (React Portal): Renderiza el menú y modales fuera del flujo del DOM del header
+ *    para evitar problemas de clipping (z-index) y overflow.
+ * 3. CATEGORIZACIÓN: Divide alertas en Críticas (Rojo), Advertencias (Naranja) e Info (Azul).
+ */
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom"; // <--- LA CLAVE MÁGICA
 import {

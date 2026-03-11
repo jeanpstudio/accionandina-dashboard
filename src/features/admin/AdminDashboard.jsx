@@ -1,79 +1,137 @@
+/**
+ * COMPONENTE: AdminDashboard (Mi Administración)
+ * -------------------------------------------
+ * Este es el sistema de gestión personal y de productividad para el equipo administrativo.
+ * Funciona bajo un esquema de "Foco Mensual", permitiendo planificar, ejecutar y reportar
+ * actividades vinculadas a una clave de mes (monthKey).
+ * 
+ * ESTRUCTURA DE DATOS:
+ * - Tareas (personal_tasks): Incluye tareas del mes y tareas arrastradas del pasado (Backlog).
+ * - Notas Diarias (personal_daily_logs_data): Registro cronológico de actividades.
+ * - Reflexiones (personal_reflections): Resumen de logros y aprendizajes del mes.
+ * 
+ * ARQUITECTURA:
+ * - Filtro Maestro: monthKey determina qué datos se muestran.
+ * - Navegación: Tres pestañas principales (Plan, Ejecución, Cierre) que subdividen el flujo de trabajo.
+ */
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {
   BrainCircuit,
+  AlertCircle,
   ChevronLeft,
   ChevronRight,
   CheckSquare,
   Calendar,
   Trophy,
-  AlertCircle,
 } from "lucide-react";
-
 import PlanningTab from "../../components/tabs/PlanningTab";
 import ExecutionTab from "../../components/tabs/ExecutionTab";
 import ReportTab from "../../components/tabs/ReportTab";
+import DailyPlanningModal from "../../components/modals/DailyPlanningModal";
 
+/**
+ * COMPONENTE: AdminDashboard (Mi Administración)
+ * -------------------------------------------
+ * Este es un sistema de gestión personal y de productividad para el equipo administrativo.
+ * Funciona bajo un esquema de "Foco Mensual", permitiendo planificar, ejecutar y reportar
+ * actividades vinculadas a una clave de mes (monthKey).
+ * 
+ * ESTRUCTURA DE DATOS:
+ * - Tareas (personal_tasks): Incluye tareas del mes y tareas arrastradas del pasado (Backlog).
+ * - Notas Diarias (personal_daily_logs_data): Registro cronológico de actividades.
+ * - Reflexiones (personal_reflections): Resumen de logros y aprendizajes del mes.
+ * */
 export default function AdminDashboard() {
+  // --- ESTADOS DE CONTROL TEMPORAL ---
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [tasks, setTasks] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [monthlyNotes, setMonthlyNotes] = useState([]);
+
+  // Clave del mes actual (Formato YYYY-MM) usada como filtro maestro en todas las queries.
+  const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+
+  // --- ESTADOS DE DATOS ---
+  const [tasks, setTasks] = useState([]); // Combinación de tareas actuales y pendientes ancestrales
+  const [categories, setCategories] = useState([]); // Categorías de organización personal
+  const [monthlyNotes, setMonthlyNotes] = useState([]); // Bitácora diaria
   const [reflections, setReflections] = useState({
     achievements: "",
     difficulties: "",
     learnings: "",
   });
-  const [activeTab, setActiveTab] = useState("plan");
+
+  const [activeTab, setActiveTab] = useState("plan"); // Pestaña activa: Plan | Ejecución | Cierre
   const [loading, setLoading] = useState(true);
 
-  // Clave del mes actual (YYYY-MM)
-  const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+  // --- ESTADO MODAL DIARIO ---
+  const [isDailyPlanOpen, setIsDailyPlanOpen] = useState(false);
 
+  // Recarga automática cada vez que el usuario cambia de mes en la interfaz.
   useEffect(() => {
     fetchData();
+    checkDailyPlan();
   }, [monthKey]);
 
+  /**
+   * checkDailyPlan: Determina si el usuario ya realizó su planificación diaria.
+   */
+  const checkDailyPlan = () => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const alreadyDone = localStorage.getItem(`daily_plan_${todayStr}`);
+
+    // Si no lo ha hecho hoy y estamos en el mes actual, abrimos el modal
+    const now = new Date();
+    const realCurrentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    if (!alreadyDone && monthKey === realCurrentMonthKey) {
+      // Pequeño delay para que no aparezca tan brusco al cargar
+      setTimeout(() => setIsDailyPlanOpen(true), 1000);
+    }
+  };
+
+  /**
+   * toLocalISOString: Utility para manejar fechas en formato YYYY-MM-DD sin problemas de zona horaria.
+   */
   const toLocalISOString = (date) => {
     const offset = date.getTimezoneOffset() * 60000;
     return new Date(date - offset).toISOString().split("T")[0];
   };
 
+  /**
+   * getWeeksInMonth: Calcula cuántas semanas visuales existen en el mes seleccionado.
+   * Útil para renderizar el calendario de planificación.
+   */
   const getWeeksInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay(); // 0 (Dom) a 6 (Sab)
+    const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     return Math.ceil((daysInMonth + firstDay) / 7);
   };
 
   const totalWeeks = getWeeksInMonth(currentDate);
 
-  const fetchData = async () => {
+  /**
+   * fetchData: Obtiene toda la información del ecosistema de administración personal.
+   */
+  async function fetchData() {
     setLoading(true);
     try {
-      // A. Categorías
+      // 1. Cargamos catálogo de categorías personales (Ej: Legal, Operaciones, etc)
       const { data: catData } = await supabase
         .from("personal_categories")
         .select("*")
         .order("name", { ascending: true });
 
-      // B. Reflexiones y Notas
+      // 2. Reflexiones del mes: Nos permiten medir el crecimiento personal.
       const { data: refData } = await supabase
         .from("personal_reflections")
         .select("*")
         .eq("month_key", monthKey)
         .maybeSingle();
-      const startOfMonth = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        1,
-      );
-      const endOfMonth = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth() + 1,
-        0,
-      );
+
+      // Rango de fechas para traer la bitácora del mes seleccionado.
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
       const { data: notesData } = await supabase
         .from("personal_daily_logs_data")
@@ -82,29 +140,30 @@ export default function AdminDashboard() {
         .lte("date", toLocalISOString(endOfMonth))
         .order("date", { ascending: true });
 
-      // C. TAREAS
-      // 1. Tareas de ESTE mes
+      // 3. SISTEMA DE TAREAS Y BACKLOG
+      // Obtenemos tareas asignadas específicamente a este mes.
       const { data: currentTasks } = await supabase
         .from("personal_tasks")
         .select("*")
         .eq("month_key", monthKey)
         .order("priority", { ascending: true });
 
-      // 2. Tareas del PASADO pendientes (Backlog REAL)
-      // Ya confiamos en que las reuniones viejas están en status 'COMPLETADO' gracias al SQL fix
+      // LÓGICA DE BACKLOG REAL:
+      // Buscamos tareas de meses pasados que aún NO tengan status 'COMPLETADO'.
+      // Esto garantiza que nada se quede en el olvido.
       const { data: backlogTasks } = await supabase
         .from("personal_tasks")
         .select("*")
         .lt("month_key", monthKey)
         .neq("status", "COMPLETADO");
 
-      // Marcamos visualmente el backlog
+      // Marcamos visualmente las tareas de arrastre para diferenciarlas en la UI.
       const cleanBacklog = (backlogTasks || []).map((t) => ({
         ...t,
         is_backlog: true,
       }));
 
-      // Unimos
+      // Unimos la lista completa para el renderizado
       const allTasks = [...cleanBacklog, ...(currentTasks || [])];
 
       setTasks(allTasks);
@@ -118,8 +177,11 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
+  /**
+   * Cambia el mes actual hacia adelante o atrás.
+   */
   const changeMonth = (d) => {
     const n = new Date(currentDate);
     n.setMonth(n.getMonth() + d);
@@ -182,6 +244,13 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          <button
+            onClick={() => setIsDailyPlanOpen(true)}
+            className="bg-brand/10 text-brand px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand/20 transition-all border border-brand/20 flex items-center gap-2"
+          >
+            <Calendar size={14} /> Planificar Día
+          </button>
+
           <div className="flex bg-gray-100 p-1 rounded-xl overflow-x-auto custom-scrollbar">
             {[
               { id: "plan", label: "Plan", icon: CheckSquare },
@@ -234,6 +303,15 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* MODAL DE PLANIFICACIÓN DIARIA */}
+      <DailyPlanningModal
+        isOpen={isDailyPlanOpen}
+        onClose={() => setIsDailyPlanOpen(false)}
+        tasks={tasks}
+        currentDate={currentDate}
+        onUpdate={fetchData}
+      />
     </div>
   );
 }

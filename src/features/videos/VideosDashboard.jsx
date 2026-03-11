@@ -1,3 +1,19 @@
+/**
+ * COMPONENTE: VideosDashboard (Video Lab)
+ * --------------------------------------
+ * Centro de pre-producción y gestión audiovisual para la red de socios.
+ * 
+ * FLUJO DE TRABAJO:
+ * 1. ESTRATEGIA: Definición del concepto, objetivos y tipo de producción (In-House, Agencia, Socio).
+ * 2. LOGÍSTICA: Cronograma detallado de actividades, fechas y responsables de rodaje.
+ * 3. SCRIPT & COPY: Editor de guion técnico y copies para redes sociales con exportación a Docs.
+ * 4. VISUALS (Storyboard): Constructor de guion gráfico para pre-visualizar tomas.
+ * 
+ * CARACTERÍSTICAS TÉCNICAS:
+ * - MediaUploader: Sistema unificado de carga de assets a 'story-attachments'.
+ * - YouTube Integration: Generación automática de thumbnails basada en URLs de video.
+ * - Exportación Dinámica: Transposición de la ficha técnica a Google Docs vía HTML Clipboard.
+ */
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../app/supabase";
 import {
@@ -279,31 +295,31 @@ export default function VideosDashboard() {
             <th style="padding: 8px; border: 1px solid #ddd;">Quiénes</th>
           </tr>
           ${formData.logistics
-            .map(
-              (l) => `
+        .map(
+          (l) => `
             <tr>
               <td style="padding: 8px; border: 1px solid #ddd;">${l.date}</td>
               <td style="padding: 8px; border: 1px solid #ddd;">${l.activity}</td>
               <td style="padding: 8px; border: 1px solid #ddd;">${l.participants}</td>
             </tr>
           `,
-            )
-            .join("")}
+        )
+        .join("")}
         </table>
 
         <h2 style="background: #fdf2f8; padding: 10px; border-left: 5px solid #db2777; margin-top: 20px;">📸 Storyboard & Visuals</h2>
         <div style="display: flex; flex-wrap: wrap; gap: 10px;">
           ${formData.storyboard
-            .map(
-              (s, i) => `
+        .map(
+          (s, i) => `
             <div style="width: 200px; border: 1px solid #ddd; padding: 5px;">
               ${s.url ? `<img src="${s.url}" style="width: 100%; height: 120px; object-fit: cover;" />` : '<div style="height:120px; background:#eee;">Sin img</div>'}
               <p style="font-size: 10px; font-weight: bold;">Toma ${i + 1}</p>
               <p style="font-size: 12px;">${s.caption}</p>
             </div>
           `,
-            )
-            .join("")}
+        )
+        .join("")}
         </div>
       </div>
     `;
@@ -517,7 +533,7 @@ export default function VideosDashboard() {
                         <div className="text-[9px] font-bold text-gray-400 flex items-center gap-1.5 truncate">
                           <TypeIcon size={12} />{" "}
                           {video.production_type === "PARTNER" &&
-                          assignedPartners.length > 0
+                            assignedPartners.length > 0
                             ? assignedPartners.map((p) => p.name).join(", ")
                             : video.production_type}
                         </div>

@@ -1,3 +1,13 @@
+/**
+ * PESTAÑA: CampaignStrategy
+ * -------------------------
+ * Definición del ADN y la narrativa de la campaña.
+ * 
+ * COMPONENTES:
+ * 1. STORYTELLING: Editor enriquecido para el contexto narrativo.
+ * 2. MATRIZ DE OBJETIVOS: Diferenciación entre el objetivo rector y los tácticos.
+ * 3. AUDIENCIAS & MENSAJES: Segmentación y "Key Messages" para garantizar coherencia editorial.
+ */
 import { useState } from "react";
 import { Target, MessageSquare, Plus, X, Quote } from "lucide-react";
 import RichEditor from "../../../components/RichEditor";

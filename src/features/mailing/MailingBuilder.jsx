@@ -1,3 +1,22 @@
+/**
+ * COMPONENTE: MailingBuilder (Mailing Lab)
+ * ---------------------------------------
+ * Un constructor visual de correos electrónicos basado en bloques modulares.
+ * Permite diseñar piezas de comunicación complejas sin escribir HTML manualmente,
+ * garantizando compatibilidad con clientes de correo (Gmail, Outlook).
+ * 
+ * LÓGICA DE CONSTRUCCIÓN:
+ * 1. DRAG & DROP: Utiliza @hello-pangea/dnd para permitir el reordenamiento vertical
+ *    de piezas (Hero, Artículos, Grilla, etc.).
+ * 2. RENDERIZER HTML: Transforma el estado JSON de bloques en una estructura de tablas
+ *    HTML anidadas (Email-Safe) para máxima compatibilidad.
+ * 3. MULTIMEDIA: Integración con Supabase Storage para alojar imágenes de los boletines.
+ * 
+ * ARQUITECTURA:
+ * - Panel Izquierdo: Configuración granular de cada bloque.
+ * - Panel Derecho: Vista previa en tiempo real (Desktop/Mobile).
+ * - Portapapeles: Función 'Copiar para Gmail' que inyecta los estilos inline.
+ */
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";

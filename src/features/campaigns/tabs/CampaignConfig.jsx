@@ -1,3 +1,13 @@
+/**
+ * PESTAÑA: CampaignConfig
+ * -----------------------
+ * Gestión de la infraestructura y recursos de la campaña.
+ * 
+ * ÁREAS DE CONTROL:
+ * 1. CENTRO DE RECURSOS: Enlaces a carpetas compartidas, assets y artes finales.
+ * 2. PRESUPUESTO: Desglose de gastos con cálculo automático de totales.
+ * 3. KPIs: Definición y seguimiento de métricas de éxito (Objetivo vs Actual).
+ */
 import { useState } from "react";
 import {
   Link as LinkIcon,

@@ -1,78 +1,123 @@
-import { useEffect, useState } from "react";
+/**
+ * COMPONENTE: Supervision (Dashboard Maestro)
+ * ------------------------------------------
+ * Centro neurálgico para la administración de la red de socios y paisajes.
+ * 
+ * ARQUITECTURA:
+ * 1. GESTIÓN DE SOCIOS (Partners): CRUD de ONGs vinculadas.
+ * 2. GESTIÓN DE PAISAJES (Projects): Configuración de metas de auditoría por sitio.
+ * 3. CONTROL DE ACCESOS (RBAC): Lógica granular que permite a editores supervisar 
+ *    proyectos específicos sin privilegios de Admin total.
+ * 4. CONFIGURACIÓN GLOBAL: Seteo de campañas de temporada y cronograma Milkywire.
+ * 
+ * SEGURIDAD:
+ * - Implementa un modo 'isReadOnly' dinámico basado en permisos de Supabase.
+ */
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
 import {
   Users,
-  MapPin,
-  Plus,
-  Trash2,
-  FileText,
-  Search,
-  ChevronRight,
-  Settings,
-  BarChart3,
+  Settings2,
+  ExternalLink,
   Eye,
-  Briefcase,
-  Shield,
-  Key,
-  UserPlus,
+  Pencil,
+  Trash2,
+  Plus,
+  Search,
+  Globe,
+  Calendar,
+  Smartphone,
   Mail,
+  Globe2,
+  Check,
   X,
+  ChevronRight,
+  History,
+  UserPlus,
+  Shield,
+  Settings,
   Megaphone,
+  MapPin,
+  Lock,
+  Briefcase,
+  BarChart3,
+  FileText,
   Image as ImageIcon,
-  Lock, // <--- Icono seguridad
 } from "lucide-react";
 
+/**
+ * COMPONENTE: Supervision
+ * -----------------------
+ * Este es el centro de control para los administradores y editores de Acción Andina.
+ * Su función principal es gestionar la red de socios (Partners), los usuarios del sistema
+ * y la configuración global de las temporadas (Campañas y Milkywire).
+ * 
+ * SEGURIDAD (RBAC):
+ * - ADMIN: Acceso total a todos los socios, proyectos, creación de usuarios y configuraciones.
+ * - EDITOR (con edit_supervision): Puede gestionar reportes y ver todo, pero con restricciones.
+ * - OTROS (PARTNERS): Solo ven lo que les corresponde según 'user_project_access'.
+ * */
 export default function Supervision() {
   const navigate = useNavigate();
 
-  // --- ESTADOS ---
-  const [activeTab, setActiveTab] = useState("partners");
+  // --- ESTADOS DE NAVEGACIÓN Y SELECCIÓN ---
+  const [activeTab, setActiveTab] = useState("partners"); // Pestaña actual: "partners" | "users"
   const [selectedPartnerForHistory, setSelectedPartnerForHistory] =
-    useState(null);
+    useState(null); // Socio seleccionado para ver historial (si tiene múltiples proyectos)
   const [selectedPartnerForReport, setSelectedPartnerForReport] =
-    useState(null);
+    useState(null); // Socio seleccionado para crear reporte (si tiene múltiples proyectos)
 
-  const [partners, setPartners] = useState([]);
-  const [profiles, setProfiles] = useState([]);
-  const [campaigns, setCampaigns] = useState([]);
+  // --- ESTADOS DE DATOS ---
+  const [partners, setPartners] = useState([]); // Lista de socios (con proyectos anidados)
+  const [profiles, setProfiles] = useState([]); // Lista de perfiles de usuario
+  const [campaigns, setCampaigns] = useState([]); // Campañas activas generales
 
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(""); // Filtro de búsqueda por nombre/país
 
-  // --- SEGURIDAD: ESTADO DE LECTURA ---
+  // --- LÓGICA DE SEGURIDAD: MODO LECTURA ---
+  /**
+   * isReadOnly determina si el usuario actual puede realizar acciones destructivas 
+   * o creativas (añadir socio, borrar usuario, etc). Basado en el rol de Supabase.
+   */
   const [isReadOnly, setIsReadOnly] = useState(true);
 
-  // Modales
+  // --- ESTADOS DE GESTIÓN DE USUARIOS (MODAL) ---
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newUser, setNewUser] = useState({
     email: "",
     password: "",
-    partner_id: "",
+    partner_id: "", // Si se asigna, el usuario será de tipo PARTNER
   });
 
-  // --- CONFIGURACIÓN GLOBAL DE TEMPORADA ---
+  // --- CONFIGURACIÓN GLOBAL DE TEMPORADA (ADMIN ONLY) ---
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsSeason, setSettingsSeason] = useState("2025-2026");
-  const [settingsTab, setSettingsTab] = useState("campaigns"); // "campaigns" | "milkywire"
-  const [seasonCampaigns, setSeasonCampaigns] = useState([]);
+  const [settingsTab, setSettingsTab] = useState("campaigns"); // Sub-pestaña: "campaigns" | "milkywire"
+  const [seasonCampaigns, setSeasonCampaigns] = useState([]); // Lista dinámica de campañas globals
   const [newCampaignTitle, setNewCampaignTitle] = useState("");
-  const [milkywireSchedule, setMilkywireSchedule] = useState([]);
+  const [milkywireSchedule, setMilkywireSchedule] = useState([]); // Cronograma generado para Milkywire
   const [isGeneratingMilky, setIsGeneratingMilky] = useState(false);
 
+  // Efecto inicial: Carga los datos maestros del dashboard
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Recurso para cargar campañas y schedules de la temporada seleccionada en settings
+  // Efecto para el modal de settings: Recarga la configuración cuando cambia la temporada seleccionada
   useEffect(() => {
     if (isSettingsModalOpen) {
       loadSeasonSettings(settingsSeason);
     }
   }, [isSettingsModalOpen, settingsSeason]);
 
+  /**
+   * Carga la configuración específica de una temporada (Campañas y Cronograma)
+   * desde las tablas globales 'season_campaigns' y 'milkywire_schedules'.
+   */
   async function loadSeasonSettings(season) {
-    // 1. Campañas Globales de esta temporada
+    // 1. Campañas Globales: Influyen en qué opciones ven los socios en sus reportes mensuales
     const { data: camps } = await supabase
       .from("season_campaigns")
       .select("*")
@@ -80,7 +125,7 @@ export default function Supervision() {
       .order("created_at", { ascending: true });
     setSeasonCampaigns(camps || []);
 
-    // 2. Cronograma Milkywire de esta temporada
+    // 2. Cronograma Milkywire: Determina a quién le toca subir contenido este mes
     const { data: milky } = await supabase
       .from("milkywire_schedules")
       .select("*, partners(name)")
@@ -89,6 +134,13 @@ export default function Supervision() {
     setMilkywireSchedule(milky || []);
   }
 
+  /**
+   * fetchData: El corazón del dashboard.
+   * Realiza 3 cosas críticas:
+   * 1. Autenticación y Autorización (RBAC).
+   * 2. Obtención de datos maestros (Partners + Projects + Reports).
+   * 3. Filtrado de seguridad (Garantiza que nadie vea proyectos que no le pertenecen).
+   */
   async function fetchData() {
     setLoading(true);
 
@@ -97,7 +149,7 @@ export default function Supervision() {
         data: { user },
       } = await supabase.auth.getUser();
       let canEdit = false;
-      let allowedProjectIds = []; // Lista de proyectos permitidos
+      let allowedProjectIds = []; // Buffer para IDs de proyectos permitidos
       let isAdmin = false;
 
       if (user) {
@@ -107,7 +159,7 @@ export default function Supervision() {
           .eq("id", user.id)
           .single();
 
-        // 1. DETERMINAR PODER DE EDICIÓN
+        // PASO 1: Determinar nivel de privilegio
         if (profile?.role === "admin") {
           canEdit = true;
           isAdmin = true;
@@ -118,7 +170,8 @@ export default function Supervision() {
           canEdit = true;
         }
 
-        // 2. OBTENER LISTA DE PROYECTOS PERMITIDOS (Si no es admin)
+        // PASO 2: Si no es admin, buscamos explícitamente a qué proyectos tiene acceso
+        // Esta tabla puente define la visibilidad granular.
         if (!isAdmin) {
           const { data: accessData } = await supabase
             .from("user_project_access")
@@ -132,8 +185,9 @@ export default function Supervision() {
       }
       setIsReadOnly(!canEdit);
 
-      // 3. CARGAR DATOS GENERALES
-      // Cargamos socios y sus proyectos anidados
+      // PASO 3: Carga de Datos Estructurales
+      // Nota técnica: Usamos consultas anidadas de Supabase para traer socios con sus proyectos 
+      // y un conteo rápido de reportes en una sola llamada (optimización de red).
       const { data: partnersData } = await supabase
         .from("partners")
         .select(
@@ -158,20 +212,20 @@ export default function Supervision() {
         .select("id, title, status, partner_ids")
         .neq("status", "PUBLICADO");
 
-      // 4. FILTRADO DE SEGURIDAD (La magia ocurre aquí)
+      // PASO 4: Filtrado Dinámico de Seguridad
+      // Si el usuario no es admin, "podamos" el árbol de datos para ocultar lo prohibido.
       let filteredPartnersData = partnersData || [];
 
       if (!isAdmin) {
-        // Recorremos cada socio y filtramos sus proyectos
         filteredPartnersData = filteredPartnersData
           .map((partner) => {
-            // Solo mantenemos los proyectos cuyo ID esté en la lista permitida
+            // Solo mantenemos los proyectos permitidos para este usuario
             const visibleProjects = partner.projects.filter((proj) =>
               allowedProjectIds.includes(proj.id),
             );
             return { ...partner, projects: visibleProjects };
           })
-          // Eliminamos socios que se quedaron sin proyectos visibles (para no mostrar tarjetas vacías)
+          // Si un socio se quedó con 0 proyectos visibles, lo eliminamos de la vista por completo.
           .filter((partner) => partner.projects.length > 0);
       }
 
@@ -185,17 +239,27 @@ export default function Supervision() {
     }
   }
 
-  // --- HELPERS ---
+  // --- HELPERS (Utilidades de Renderizado) ---
+
+  /**
+   * Obtiene el email del usuario principal vinculado a un socio (Partner).
+   */
   const getPartnerEmail = (partnerId) => {
     const linkedUser = profiles.find((p) => p.partner_id === partnerId);
     return linkedUser ? linkedUser.email : "Sin usuario asignado";
   };
 
+  /**
+   * Calcula estadísticas agregadas para un socio para mostrar en las tarjetas.
+   * Cuenta campañas donde participa, fotos totales en reportes y estado de actividad.
+   */
   const getPartnerStats = (partner) => {
+    // Conteo de campañas activas (Basado en el array partner_ids de la tabla campaigns)
     const activeCampaignsCount = campaigns.filter(
       (c) => Array.isArray(c.partner_ids) && c.partner_ids.includes(partner.id),
     ).length;
 
+    // Conteo de contenido (Sumatoria de todas las fotos enviadas en reportes mensuales)
     let totalPhotos = 0;
     partner.projects?.forEach((proj) => {
       proj.monthly_reports?.forEach((rep) => {
@@ -203,6 +267,7 @@ export default function Supervision() {
       });
     });
 
+    // Estado: Activo si tiene al menos un reporte mensual cargado
     const hasRecentActivity = partner.projects?.some(
       (p) => p.monthly_reports?.length > 0,
     );
@@ -217,9 +282,14 @@ export default function Supervision() {
     };
   };
 
-  // --- GESTIÓN (BLOQUEADA SI READONLY) ---
+  // --- GESTIÓN DE DATOS (ACCIONES PROTEGIDAS) ---
+
+  /**
+   * softDeletePartner: "Elimina" un socio cambiando su estado a inactivo (is_active: false).
+   * No borra datos físicos de la DB para preservar integridad de reportes históricos.
+   */
   async function softDeletePartner(id, name) {
-    if (isReadOnly) return; // CANDADO
+    if (isReadOnly) return; // BLOQUEO DE SEGURIDAD UI
     if (confirm(`¿Estás seguro de eliminar a "${name}"?`)) {
       const { error } = await supabase
         .from("partners")
@@ -230,17 +300,26 @@ export default function Supervision() {
     }
   }
 
+  /**
+   * handleCreateUser: Registra un nuevo acceso en Supabase Auth y crea el perfil en 'profiles'.
+   * Diferencia automáticamente entre ADMIN y PARTNER según si se elige organización.
+   */
   const handleCreateUser = async () => {
-    if (isReadOnly) return; // CANDADO
+    if (isReadOnly) return;
     if (!newUser.email || !newUser.password) return;
+
+    // 1. Registro en el sistema de autenticación de Supabase
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: newUser.email,
       password: newUser.password,
     });
+
     if (authError) {
       alert(authError.message);
       return;
     }
+
+    // 2. Creación del perfil con metadatos de rol y asociación al socio
     if (authData.user) {
       const { error: profileError } = await supabase.from("profiles").insert([
         {
@@ -252,7 +331,7 @@ export default function Supervision() {
       ]);
       if (profileError) alert(profileError.message);
       else {
-        alert("✅ Usuario creado");
+        alert("✅ Usuario creado satisfactoriamente.");
         setIsUserModalOpen(false);
         setNewUser({ email: "", password: "", partner_id: "" });
         fetchData();
@@ -260,17 +339,23 @@ export default function Supervision() {
     }
   };
 
+  /**
+   * Borra un perfil de usuario (No borra el email de Auth, solo el acceso al dashboard).
+   */
   const handleDeleteUser = async (id) => {
-    if (isReadOnly) return; // CANDADO
+    if (isReadOnly) return;
     if (confirm("¿Borrar acceso?")) {
       await supabase.from("profiles").delete().eq("id", id);
       fetchData();
     }
   };
 
-  // --- LÓGICA CONFIGURACIÓN GLOBAL (ADMIN) ---
+  // --- LÓGICA DE CONFIGURACIÓN GLOBAL (PARAMETRIZACIÓN ADMIN) ---
 
-  // Agregar una nueva campaña a la lista global de la temporada
+  /**
+   * Añade una campaña global (Ej: 'Vuelo de Campaña 2026').
+   * Estas campañas se vuelven metadatos obligatorios u opcionales en los reportes de los socios.
+   */
   const handleAddSeasonCampaign = async () => {
     if (!newCampaignTitle.trim()) return;
     const { error } = await supabase.from("season_campaigns").insert([{
@@ -284,51 +369,61 @@ export default function Supervision() {
     }
   };
 
-  // Eliminar campaña global
+  /**
+   * Elimina una campaña global.
+   */
   const handleDeleteSeasonCampaign = async (id) => {
-    if (confirm("¿Eliminar campaña global? Esto no afectará a los reportes pasados que ya escribieron sobre ella, solo ya no saldrá como opción nueva.")) {
+    if (confirm("¿Eliminar campaña global?")) {
       const { error } = await supabase.from("season_campaigns").delete().eq("id", id);
       if (error) alert(error.message);
       else loadSeasonSettings(settingsSeason);
     }
   };
 
-  // Algoritmo de "Chocolateo" Milkywire
-  // Distribuye a los 15 socios actuales en 12 meses (3 por mes = 36 slots)
+  /**
+   * handleGenerateMilkywire: ALGORITMO DE DISTRIBUCIÓN EQUITATIVA ("CHOCOLETAREO")
+   * ----------------------------------------------------------------------------
+   * Propósito: Distribuir a todos los socios activos en los 12 meses del año, 
+   * garantizando que haya exactamente 3 socios por mes (36 slots anuales) para Milkywire.
+   * 
+   * Mecánica:
+   * 1. Limpia cualquier cronograma previo para la temporada.
+   * 2. Crea un 'pool' circular con los socios actuales.
+   * 3. Aplica Shuffle (Mezcla aleatoria Fisher-Yates).
+   * 4. Asigna 3 a cada mes, validando que un socio no se repita en el mismo mes.
+   */
   const handleGenerateMilkywire = async () => {
-    if (!confirm("Esto borrará el cronograma actual de la temporada y generará uno nuevo repartido entre los 15 socios actuales de forma equitativa (3 cupos x mes). ¿Continuar?")) return;
+    if (!confirm("Se generará un nuevo cronograma equitativo (3 cupos x mes). ¿Continuar?")) return;
 
     setIsGeneratingMilky(true);
     try {
-      // 1. Limpiar cronograma existente para la temporada
+      // 1. Reset de la temporada
       await supabase.from("milkywire_schedules").delete().eq("season_name", settingsSeason);
 
-      // 2. Obtener socios activos del sistema
+      // 2. Obtención de participantes
       const { data: activePartners } = await supabase.from("partners").select("id").eq("is_active", true);
       if (!activePartners || activePartners.length === 0) throw new Error("No hay socios activos.");
 
       const pIds = activePartners.map(p => p.id);
-
       const targetMonths = [
         "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
         "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
       ];
 
-      // Creamos un pool de IDs repetidos para cubrir los 36 espacios (3 x mes)
+      // Creamos pool: Si hay 15 socios, los repetimos hasta cubrir los 36 espacios (3 x mes)
       let pool = [];
       while (pool.length < 36) {
         pool = pool.concat(pIds);
       }
-      // Cortar a exactamente 36
       pool = pool.slice(0, 36);
 
-      // Mezcla aleatoria (Shuffle) Fisher-Yates
+      // MIX: Fisher-Yates para asegurar aleatoriedad real
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
 
-      // 3. Asignación por meses asegurando que un socio no se repita el MISMO mes
+      // 3. Distribución mensual
       const newSchedules = [];
       let poolIndex = 0;
 
@@ -337,10 +432,11 @@ export default function Supervision() {
         let tries = 0;
 
         while (assignedInThisMonth.size < 3) {
-          if (tries > 50) break; // Evitar loop si el pool está vacío o no se pueden asignar 3 únicos
+          if (tries > 50) break; // Guardrail contra loops infinitos
 
           let candidate = pool[poolIndex % pool.length];
 
+          // Validación de unicidad mensual
           if (!assignedInThisMonth.has(candidate)) {
             assignedInThisMonth.add(candidate);
             newSchedules.push({
@@ -348,7 +444,7 @@ export default function Supervision() {
               target_month: month,
               partner_id: candidate
             });
-            pool.splice(poolIndex % pool.length, 1); // Quitar del pool para rotar y que otros socios salgan
+            pool.splice(poolIndex % pool.length, 1); // Removemos del pool para que rote la lista
           } else {
             poolIndex++;
           }
@@ -356,7 +452,7 @@ export default function Supervision() {
         }
       }
 
-      // 4. Guardar en Supabase
+      // 4. Persistencia en Supabase
       const { error: insErr } = await supabase.from("milkywire_schedules").insert(newSchedules);
       if (insErr) throw insErr;
 
@@ -383,10 +479,13 @@ export default function Supervision() {
     0,
   );
 
-  // --- RENDER ---
+  // --- RENDERIZADO DEL DASHBOARD ---
   return (
     <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
-      {/* HEADER */}
+      {/* 
+          BARRA DE NAVEGACIÓN SUPERIOR (HEADER)
+          Contiene el título dinámico y las acciones rápidas (Configuración, Reportes, Creación).
+      */}
       <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
         <div>
           <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
@@ -394,6 +493,7 @@ export default function Supervision() {
           </h1>
           <p className="text-brand font-bold text-lg mt-1 italic flex items-center gap-2">
             Control de socios y paisajes.
+            {/* Indicador visual de seguridad: Informa al editor si no tiene permisos de escritura */}
             {isReadOnly && (
               <span className="ml-2 bg-gray-200 text-gray-500 px-2 py-1 rounded-md text-[10px] flex items-center gap-1">
                 <Lock size={10} /> SOLO LECTURA
@@ -402,6 +502,7 @@ export default function Supervision() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3 items-center w-full sm:w-auto">
+          {/* Switch de Pestañas: Socios vs Usuarios */}
           <div className="bg-gray-100 p-1 rounded-xl flex">
             <button
               onClick={() => setActiveTab("partners")}
@@ -417,7 +518,7 @@ export default function Supervision() {
             </button>
           </div>
 
-          {/* BOTÓN CONFIGURAR TEMPORADA */}
+          {/* ACCIÓN: Parametrización (Solo visible si es Admin/Editor con permiso) */}
           {!isReadOnly && (
             <button
               onClick={() => setIsSettingsModalOpen(true)}
@@ -434,7 +535,7 @@ export default function Supervision() {
             <BarChart3 size={16} /> Reporte Global
           </button>
 
-          {/* BOTONES DE CREACIÓN: OCULTOS SI ES READONLY */}
+          {/* BOTONES DE CREACIÓN: Se adaptan según la pestaña activa */}
           {!isReadOnly &&
             (activeTab === "partners" ? (
               <button
