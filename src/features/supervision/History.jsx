@@ -36,6 +36,7 @@ import {
   ChevronDown,
   Hash,
   Lock, // <--- IMPORTANTE: Icono de seguridad
+  Eye, // <--- ICONO DE VISTA
 } from "lucide-react";
 
 export default function History() {
@@ -836,17 +837,30 @@ export default function History() {
               <div className="flex flex-col md:flex-row items-center p-6 gap-8 relative">
                 {/* BOTÓN EDITAR REPORTE: OCULTO SI ES READONLY */}
                 {!isReadOnly && (
-                  <button
-                    onClick={() =>
-                      navigate(
-                        `/supervision/editar-reporte/${projectId}/${report.id}`,
-                      )
-                    }
-                    className="absolute top-4 right-4 text-gray-300 hover:text-brand hover:bg-brand/10 p-2 rounded-xl transition-all"
-                    title="Editar Reporte"
-                  >
-                    <Edit size={18} />
-                  </button>
+                  <div className="absolute top-4 right-4 flex gap-2">
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/supervision/ver-reporte/${projectId}/${report.id}`,
+                        )
+                      }
+                      className="text-gray-300 hover:text-brand hover:bg-brand/10 p-2 rounded-xl transition-all"
+                      title="Ver Detalles del Mes"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    <button
+                      onClick={() =>
+                        navigate(
+                          `/supervision/editar-reporte/${projectId}/${report.id}`,
+                        )
+                      }
+                      className="text-gray-300 hover:text-brand hover:bg-brand/10 p-2 rounded-xl transition-all"
+                      title="Editar Reporte"
+                    >
+                      <Edit size={18} />
+                    </button>
+                  </div>
                 )}
 
                 {report.is_season_start && (

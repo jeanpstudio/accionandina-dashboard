@@ -76,6 +76,10 @@ export default function App() {
             path="/supervision/historial/:projectId"
             element={<History />}
           />
+          <Route
+            path="/supervision/ver-reporte/:projectId/:reportId"
+            element={<ReportForm isViewMode={true} />}
+          />
           <Route path="/new-project/:partnerId" element={<ProjectForm />} />
           <Route path="/edit-project/:projectId" element={<ProjectForm />} />
           <Route path="/new-partner" element={<PartnerForm />} />

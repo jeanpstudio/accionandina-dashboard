@@ -26,6 +26,7 @@ import {
   X,
   Plus,
   MessageSquare,
+  ChevronRight,
 } from "lucide-react";
 
 /**
@@ -41,8 +42,8 @@ import {
  *    al usuario a registrar el material o justificar la falta.
  * 3. CAMPOS DINÁMICOS: Las campañas mostradas dependen de la configuración global de la temporada.
  * */
-export default function ReportForm() {
-  // Parámetros de la URL: projectId siempre presente, reportId solo en modo edición.
+// Parámetros de la URL: projectId siempre presente, reportId solo en modo edición.
+export default function ReportForm({ isViewMode = false }) {
   const { projectId, reportId } = useParams();
   const navigate = useNavigate();
 
@@ -89,6 +90,7 @@ export default function ReportForm() {
     milkywire_comment: "",
     is_season_start: false,
     is_last_month: false,
+    corrections: [], // <--- NUEVO CAMPO: Historial de cambios
   });
 
   // Meses donde el equipo de comunicación exige videos de corte.
@@ -234,6 +236,7 @@ export default function ReportForm() {
           campaigns: ensureArray(report.campaigns),
           videos: ensureArray(report.videos),
           milkywire_material: ensureArray(report.milkywire_material),
+          corrections: ensureArray(report.corrections),
         });
 
         // Marcamos flags de "Sin Entrega" si hay comentario pero no hay items en los arrays
@@ -367,6 +370,56 @@ export default function ReportForm() {
       // 3. PERSISTENCIA EN SUPABASE
       let error;
       if (isEditing) {
+        // --- LÓGICA DE HISTORIAL DE CORRECCIONES ---
+        // Obtenemos la versión actual antes de guardar para comparar
+        const { data: currentReport } = await supabase
+          .from("monthly_reports")
+          .select("*")
+          .eq("id", reportId)
+          .single();
+
+        if (currentReport) {
+          const newCorrections = [];
+          const timestamp = new Date().toISOString();
+
+          // Campos a monitorear: fotos, posts, comentarios principales
+          const fieldsToWatch = [
+            { id: "photo_count", label: "Fotos" },
+            { id: "post_count", label: "Posts" },
+            { id: "web_progress_percent", label: "Avance Web" },
+            { id: "photo_comment", label: "Comentario Fotos" },
+            { id: "post_comment", label: "Comentario Posts" },
+            { id: "web_comment", label: "Comentario Web" },
+            { id: "video_comment", label: "Comentario Videos" },
+            { id: "campaign_comment", label: "Comentario Campañas" },
+            { id: "season_comment", label: "Observación General" }
+          ];
+
+          fieldsToWatch.forEach(field => {
+            const oldVal = currentReport[field.id];
+            const newVal = formData[field.id];
+
+            // Comparamos valores (con conversión a string para ser seguros)
+            if (String(oldVal) !== String(newVal)) {
+              newCorrections.push({
+                field: field.id,
+                label: field.label,
+                oldValue: oldVal,
+                newValue: newVal,
+                timestamp
+              });
+            }
+          });
+
+          // Si hay cambios, los añadimos al historial existente
+          if (newCorrections.length > 0) {
+            dataToSave.corrections = [
+              ...ensureArray(currentReport.corrections),
+              ...newCorrections
+            ];
+          }
+        }
+
         // Modo Edición: UPDATE
         const { error: updErr } = await supabase
           .from("monthly_reports")
@@ -412,23 +465,44 @@ export default function ReportForm() {
           >
             <ArrowLeft size={16} /> Regresar
           </button>
-          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
-            {isEditing ? <Edit className="text-brand" size={32} /> : null}
-            {isEditing ? "Editar Reporte" : "Nuevo Reporte"}
+            <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+            {isEditing && !isViewMode ? <Edit className="text-brand" size={32} /> : null}
+            {isViewMode ? <CheckCircle2 className="text-brand" size={32} /> : null}
+            {isViewMode ? "Ver Reporte" : isEditing ? "Editar Reporte" : "Nuevo Reporte"}
           </h1>
           <p className="text-brand font-bold text-sm md:text-lg mt-1 italic">
             {project?.partners?.name} / {project?.name}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={loading}
-          className="bg-brand hover:bg-brand-light text-white w-14 h-14 rounded-2xl transition-all shadow-xl shadow-brand/20 flex items-center justify-center group active:scale-90 border border-brand/10"
-        >
-          <Save size={24} className="text-white" />
-        </button>
+        {!isViewMode && (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="bg-brand hover:bg-brand-light text-white w-14 h-14 rounded-2xl transition-all shadow-xl shadow-brand/20 flex items-center justify-center group active:scale-90 border border-brand/10"
+          >
+            <Save size={24} className="text-white" />
+          </button>
+        )}
       </div>
+
+      {isViewMode && ensureArray(formData.corrections).length > 0 && (
+        <div className="mb-10 bg-orange-50 border-2 border-orange-100 p-6 rounded-[32px] animate-in fade-in slide-in-from-top-4">
+          <p className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+            <Edit size={14} /> Historial de Correcciones Visuales
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {ensureArray(formData.corrections).map((c, i) => (
+              <div key={i} className="bg-white px-4 py-2 rounded-xl shadow-sm border border-orange-100 flex items-center gap-3">
+                <span className="text-[10px] font-black text-gray-900 uppercase">{c.label}</span>
+                <span className="text-[10px] text-gray-400 line-through">{c.oldValue || "Vacio"}</span>
+                <ChevronRight size={10} className="text-orange-500" />
+                <span className="text-[10px] font-bold text-orange-600">{c.newValue || "Vacio"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form
         onSubmit={handleSubmit}
@@ -445,6 +519,7 @@ export default function ReportForm() {
                 className="col-span-2 bg-gray-50 border-none rounded-xl p-4 font-bold text-sm uppercase cursor-pointer outline-none"
                 value={formData.season_name}
                 required
+                disabled={isViewMode}
                 onChange={(e) =>
                   setFormData((p) => ({ ...p, season_name: e.target.value }))
                 }
@@ -460,6 +535,7 @@ export default function ReportForm() {
                 className="bg-gray-50 border-none rounded-xl p-4 font-bold text-sm"
                 value={formData.report_month}
                 required
+                disabled={isViewMode}
                 onChange={(e) =>
                   setFormData((p) => ({ ...p, report_month: e.target.value }))
                 }
@@ -473,6 +549,7 @@ export default function ReportForm() {
               <select
                 className="bg-gray-50 border-none rounded-xl p-4 font-bold text-sm"
                 value={formData.report_year}
+                disabled={isViewMode}
                 onChange={(e) =>
                   setFormData((p) => ({
                     ...p,
@@ -499,6 +576,7 @@ export default function ReportForm() {
                     type="checkbox"
                     className="hidden"
                     checked={formData.is_season_start}
+                    disabled={isViewMode}
                     onChange={(e) =>
                       setFormData((p) => ({
                         ...p,
@@ -526,6 +604,7 @@ export default function ReportForm() {
                     type="checkbox"
                     className="hidden"
                     checked={formData.is_last_month}
+                    disabled={isViewMode}
                     onChange={(e) =>
                       setFormData((p) => ({
                         ...p,
@@ -553,15 +632,18 @@ export default function ReportForm() {
                   placeholder="Pegar URL..."
                   className="flex-1 bg-gray-50 border-none rounded-xl p-4 text-sm italic"
                   value={currentLink}
+                  disabled={isViewMode}
                   onChange={(e) => setCurrentLink(e.target.value)}
                 />
-                <button
-                  type="button"
-                  onClick={addSocialLink}
-                  className="bg-brand text-white px-5 rounded-xl font-black"
-                >
-                  +
-                </button>
+                {!isViewMode && (
+                  <button
+                    type="button"
+                    onClick={addSocialLink}
+                    className="bg-brand text-white px-5 rounded-xl font-black"
+                  >
+                    +
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {Array.isArray(formData.social_links) &&
@@ -571,18 +653,20 @@ export default function ReportForm() {
                       className="bg-brand/10 text-brand text-[9px] px-2.5 py-1.5 rounded-lg flex items-center gap-2 font-black border border-brand/5 max-w-full"
                     >
                       <span className="truncate max-w-[150px]">{l}</span>
-                      <X
-                        size={12}
-                        className="cursor-pointer hover:text-red-500"
-                        onClick={() =>
-                          setFormData((p) => ({
-                            ...p,
-                            social_links: p.social_links.filter(
-                              (_, idx) => idx !== i
-                            ),
-                          }))
-                        }
-                      />
+                      {!isViewMode && (
+                        <X
+                          size={12}
+                          className="cursor-pointer hover:text-red-500"
+                          onClick={() =>
+                            setFormData((p) => ({
+                              ...p,
+                              social_links: p.social_links.filter(
+                                (_, idx) => idx !== i
+                              ),
+                            }))
+                          }
+                        />
+                      )}
                     </div>
                   ))}
               </div>
@@ -596,6 +680,7 @@ export default function ReportForm() {
                       type="number"
                       className="w-16 h-12 bg-gray-50 border-none rounded-xl font-black text-center text-sm"
                       value={formData.photo_count}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         setFormData((p) => ({
                           ...p,
@@ -607,6 +692,7 @@ export default function ReportForm() {
                       placeholder="Comentario..."
                       className="flex-1 bg-brand/5 rounded-2xl p-4 text-sm italic min-h-[80px] outline-none"
                       value={formData.photo_comment}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         setFormData((p) => ({
                           ...p,
@@ -625,6 +711,7 @@ export default function ReportForm() {
                       type="number"
                       className="w-16 h-12 bg-gray-50 border-none rounded-xl font-black text-center text-sm"
                       value={formData.post_count}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         setFormData((p) => ({
                           ...p,
@@ -636,6 +723,7 @@ export default function ReportForm() {
                       placeholder="Comentario..."
                       className="flex-1 bg-brand/5 rounded-2xl p-4 text-sm italic min-h-[80px] outline-none"
                       value={formData.post_comment}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         setFormData((p) => ({
                           ...p,
@@ -662,6 +750,7 @@ export default function ReportForm() {
               type="range"
               className="w-full accent-brand cursor-pointer h-2"
               value={formData.web_progress_percent}
+              disabled={isViewMode}
               onChange={(e) =>
                 setFormData((p) => ({
                   ...p,
@@ -673,6 +762,7 @@ export default function ReportForm() {
               placeholder="Detalles del avance..."
               className="w-full bg-brand/5 rounded-2xl p-5 text-sm italic min-h-[100px] outline-none shadow-inner"
               value={formData.web_comment}
+              disabled={isViewMode}
               onChange={(e) =>
                 setFormData((p) => ({ ...p, web_comment: e.target.value }))
               }
@@ -718,6 +808,7 @@ export default function ReportForm() {
                           type="checkbox"
                           className="w-5 h-5 accent-brand"
                           checked={isChecked}
+                          disabled={isViewMode}
                           onChange={() => handleToggleCampaign(camp.title)}
                         />
                         <div className="flex flex-col">
@@ -732,6 +823,7 @@ export default function ReportForm() {
                           className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
                           rows="2"
                           value={currentCampData?.comment || ""}
+                          disabled={isViewMode}
                           onChange={(e) => updateCampaignComment(camp.title, e.target.value)}
                         />
                       )}
@@ -751,6 +843,7 @@ export default function ReportForm() {
                           type="checkbox"
                           className="w-5 h-5 accent-blue-500"
                           checked={isChecked}
+                          disabled={isViewMode}
                           onChange={() => handleToggleCampaign(camp.title)}
                         />
                         <div className="flex flex-col">
@@ -765,6 +858,7 @@ export default function ReportForm() {
                           className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
                           rows="2"
                           value={currentCampData?.comment || ""}
+                          disabled={isViewMode}
                           onChange={(e) => updateCampaignComment(camp.title, e.target.value)}
                         />
                       )}
@@ -785,6 +879,7 @@ export default function ReportForm() {
                   placeholder="Nombre de la campaña..."
                   className="flex-1 bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
                   value={tempCamp.title}
+                  disabled={isViewMode}
                   onChange={(e) => setTempCamp(p => ({ ...p, title: e.target.value }))}
                 />
               </div>
@@ -793,15 +888,18 @@ export default function ReportForm() {
                 className="w-full bg-white border-none rounded-xl p-4 text-xs italic font-medium outline-none text-gray-700 shadow-sm"
                 rows="2"
                 value={tempCamp.comment}
+                disabled={isViewMode}
                 onChange={(e) => setTempCamp(p => ({ ...p, comment: e.target.value }))}
               />
-              <button
-                type="button"
-                onClick={() => addItem("campaigns", tempCamp, setTempCamp, "title")}
-                className="w-full py-3 bg-brand/10 text-brand text-[10px] font-black rounded-xl uppercase tracking-[0.1em] hover:bg-brand hover:text-white transition-all border border-brand/20"
-              >
-                + Agregar Campaña Manual
-              </button>
+              {!isViewMode && (
+                <button
+                  type="button"
+                  onClick={() => addItem("campaigns", tempCamp, setTempCamp, "title")}
+                  className="w-full py-3 bg-brand/10 text-brand text-[10px] font-black rounded-xl uppercase tracking-[0.1em] hover:bg-brand hover:text-white transition-all border border-brand/20"
+                >
+                  + Agregar Campaña Manual
+                </button>
+              )}
             </div>
 
             {/* SECCIÓN C: Comentario General de Campañas (Siempre habilitado) */}
@@ -813,6 +911,7 @@ export default function ReportForm() {
                 placeholder="Resumen general de las campañas de este mes..."
                 className="w-full bg-gray-50 rounded-2xl p-5 text-sm italic min-h-[100px] outline-none shadow-inner border border-gray-100"
                 value={formData.campaign_comment}
+                disabled={isViewMode}
                 onChange={(e) => setFormData(p => ({ ...p, campaign_comment: e.target.value }))}
               />
             </div>
@@ -867,17 +966,19 @@ export default function ReportForm() {
                 </label>
 
                 {/* Switch de "Sin Entrega" para modo justificación */}
-                <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100/30">
-                  <input
-                    type="checkbox"
-                    className="accent-red-500 scale-110 cursor-pointer"
-                    checked={sec.no}
-                    onChange={(e) => sec.setNo(e.target.checked)}
-                  />
-                  <span className="text-[10px] font-bold text-red-600 uppercase">
-                    Sin Entrega
-                  </span>
-                </div>
+                {!isViewMode && (
+                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100/30">
+                    <input
+                      type="checkbox"
+                      className="accent-red-500 scale-110 cursor-pointer"
+                      checked={sec.no}
+                      onChange={(e) => sec.setNo(e.target.checked)}
+                    />
+                    <span className="text-[10px] font-bold text-red-600 uppercase">
+                      Sin Entrega
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* ÁREA DE CARGA MANUAL (Ahora siempre disponible o por toggle) */}
@@ -889,6 +990,7 @@ export default function ReportForm() {
                       placeholder={`Link o Nombre del material...`}
                       className="w-full bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
                       value={sec.temp[sec.field]}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         sec.setTemp((p) => ({
                           ...p,
@@ -896,15 +998,17 @@ export default function ReportForm() {
                         }))
                       }
                     />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        addItem(sec.id, sec.temp, sec.setTemp, sec.field)
-                      }
-                      className="w-full py-3 bg-brand text-white text-[10px] font-black rounded-xl uppercase tracking-[0.1em] active:scale-95 hover:brightness-110 transition-all shadow-md"
-                    >
-                      + Registrar Entrega Manual
-                    </button>
+                    {!isViewMode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addItem(sec.id, sec.temp, sec.setTemp, sec.field)
+                        }
+                        className="w-full py-3 bg-brand text-white text-[10px] font-black rounded-xl uppercase tracking-[0.1em] active:scale-95 hover:brightness-110 transition-all shadow-md"
+                      >
+                        + Registrar Entrega Manual
+                      </button>
+                    )}
                     {/* Visualización de items cargados con inputs para detalles adicionales */}
                     {ensureArray(formData[sec.id]).length > 0 && (
                       <div className="space-y-3 mt-6">
@@ -915,20 +1019,23 @@ export default function ReportForm() {
                               <span className="text-[10px] font-black text-brand uppercase truncate max-w-[80%]">
                                 {item[sec.field]}
                               </span>
-                              <X
-                                size={14}
-                                className="cursor-pointer text-gray-300 hover:text-red-500 transition-colors"
-                                onClick={() => {
-                                  const updated = ensureArray(formData[sec.id]).filter((_, i) => i !== idx);
-                                  setFormData(p => ({ ...p, [sec.id]: updated }));
-                                }}
-                              />
+                              {!isViewMode && (
+                                <X
+                                  size={14}
+                                  className="cursor-pointer text-gray-300 hover:text-red-500 transition-colors"
+                                  onClick={() => {
+                                    const updated = ensureArray(formData[sec.id]).filter((_, i) => i !== idx);
+                                    setFormData(p => ({ ...p, [sec.id]: updated }));
+                                  }}
+                                />
+                              )}
                             </div>
                             <div className="p-3 bg-white">
                               <textarea
                                 placeholder="Añadir links de respaldo, descripción o notas..."
                                 className="w-full bg-gray-50 border-none rounded-lg p-2 text-[11px] italic font-medium outline-none text-gray-600 min-h-[50px] resize-none"
                                 value={item.comment || ""}
+                                disabled={isViewMode}
                                 onChange={(e) => updateGenericField(sec.id, idx, "comment", e.target.value)}
                               />
                             </div>
@@ -944,6 +1051,7 @@ export default function ReportForm() {
                       placeholder={sec.isSpecialMonth ? "Indica obligatoriamente el motivo por el que NO se cumplió la entrega este mes..." : "Motivo (Opcional)..."}
                       className={`w-full bg-red-50 border-2 rounded-2xl p-4 text-sm italic outline-none transition-all ${sec.isSpecialMonth && !formData[sec.commentField]?.trim() ? "border-red-400 text-red-900" : "border-red-100/20 text-red-800"}`}
                       value={formData[sec.commentField]}
+                      disabled={isViewMode}
                       onChange={(e) =>
                         setFormData((p) => ({
                           ...p,
@@ -978,6 +1086,7 @@ export default function ReportForm() {
           </div>
           <textarea
             value={formData.season_comment}
+            disabled={isViewMode}
             onChange={(e) =>
               setFormData((prev) => ({
                 ...prev,
