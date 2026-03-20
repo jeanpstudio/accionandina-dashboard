@@ -114,6 +114,7 @@ export default function PartnerStories() {
     title: "",
     content: "",
     media_link: "",
+    comments: "", // <--- NUEVO: Espacio para notas editoriales o comentarios internos
     rating: 0,
     is_favorite: false,
   });
@@ -165,6 +166,7 @@ export default function PartnerStories() {
       },
       social_data: s.social_data || { copy: "", hashtags: "", image_url: "" },
       article_data: s.article_data || { title: "", body: "", cover_url: "" },
+      comments: s.comments || "", // Garantizamos que no sea null
     }));
     setStories(processed);
 
@@ -177,10 +179,19 @@ export default function PartnerStories() {
     setLoading(false);
   }
 
+  /**
+   * handleUpdateModule: Actualiza recursivamente el estado de los módulos de contenido 
+   * (Video, Redes, Artículos) y persiste los cambios de forma asíncrona en Supabase.
+   * 
+   * @param {string} storyId - Identificador único de la historia.
+   * @param {string} field - El campo JSONB a actualizar (video_data | social_data | article_data).
+   * @param {object} newData - El nuevo objeto de datos para dicho módulo.
+   */
   const handleUpdateModule = async (storyId, field, newData) => {
     setStories((prev) =>
       prev.map((s) => (s.id === storyId ? { ...s, [field]: newData } : s)),
     );
+    // Persistencia selectiva: Solo intentamos guardar si el usuario no está en modo lectura
     if (!isReadOnly)
       await supabase
         .from("partner_stories")
@@ -188,6 +199,10 @@ export default function PartnerStories() {
         .eq("id", storyId);
   };
 
+  /**
+   * toggleFlag: Sistema de gestión de estados (Banderas) para el flujo de trabajo.
+   * Alterna tags como "Revisado", "Fotos OK", etc.
+   */
   const toggleFlag = async (story, flagId) => {
     if (isReadOnly) return;
     const currentFlags = story.status_flags || [];
@@ -204,6 +219,11 @@ export default function PartnerStories() {
       .update({ status_flags: newFlags })
       .eq("id", story.id);
   };
+
+  /**
+   * toggleWorkPlan: Mueve una historia entre el "Banco General" y el "Plan de Trabajo".
+   * Este es el disparador para que una historia entre en el pipeline de producción.
+   */
   const toggleWorkPlan = async (story) => {
     if (isReadOnly) return;
     const newValue = !story.in_work_plan;
@@ -217,6 +237,10 @@ export default function PartnerStories() {
       .update({ in_work_plan: newValue })
       .eq("id", story.id);
   };
+
+  /**
+   * toggleFavorite: Marca una historia como destacada para su uso en reportes anuales.
+   */
   const toggleFavorite = async (story) => {
     if (isReadOnly) return;
     const newValue = !story.is_favorite;
@@ -230,6 +254,10 @@ export default function PartnerStories() {
       .update({ is_favorite: newValue })
       .eq("id", story.id);
   };
+
+  /**
+   * updateRating: Califica la calidad de la historia de 1 a 5 estrellas.
+   */
   const updateRating = async (story, newRating) => {
     if (isReadOnly) return;
     setStories(
@@ -240,15 +268,43 @@ export default function PartnerStories() {
       .update({ rating: newRating })
       .eq("id", story.id);
   };
+
+  /**
+   * updateUsageDetails: Actualiza la nota de "Uso Final" en el estado local.
+   */
   const updateUsageDetails = (id, text) =>
     setStories(
       stories.map((s) => (s.id === id ? { ...s, usage_details: text } : s)),
     );
+
+  /**
+   * saveUsageDetails: Guarda la nota de "Uso Final" en la base de datos.
+   */
   const saveUsageDetails = async (id, text) => {
     if (!isReadOnly)
       await supabase
         .from("partner_stories")
         .update({ usage_details: text })
+        .eq("id", id);
+  };
+
+  /**
+   * updateComments: Actualiza el estado local de los comentarios.
+   * Utilizado para edición rápida en la tarjeta.
+   */
+  const updateComments = (id, text) =>
+    setStories(
+      stories.map((s) => (s.id === id ? { ...s, comments: text } : s)),
+    );
+
+  /**
+   * saveComments: Persiste los comentarios en la base de datos (Supabase).
+   */
+  const saveComments = async (id, text) => {
+    if (!isReadOnly)
+      await supabase
+        .from("partner_stories")
+        .update({ comments: text })
         .eq("id", id);
   };
 
@@ -290,8 +346,9 @@ export default function PartnerStories() {
       partner_id: formData.partner_id,
       month: formData.month,
       title: formData.title,
-      content: formData.content,
-      media_link: formData.media_link,
+      content: formData.content || "",
+      media_link: formData.media_link || "",
+      comments: formData.comments || "",
     };
     if (editingId)
       await supabase
@@ -306,6 +363,7 @@ export default function PartnerStories() {
       title: "",
       content: "",
       media_link: "",
+      comments: "",
       rating: 0,
       is_favorite: false,
     });
@@ -323,8 +381,9 @@ export default function PartnerStories() {
       partner_id: story.partner_id,
       month: story.month,
       title: story.title,
-      content: story.content || "",
+      content: story.content || "", // Fallback para evitar crashes en RichEditor
       media_link: story.media_link || "",
+      comments: story.comments || "",
       rating: story.rating || 0,
       is_favorite: story.is_favorite || false,
     });
@@ -387,6 +446,11 @@ export default function PartnerStories() {
     );
   const displayedStories = filteredStories;
 
+  // Lógica para el botón "Todas": Total basado en el Tab activo (Plan o Banco)
+  const totalCountForActiveTab = activeTab === "PLAN" 
+    ? stories.filter(s => s.in_work_plan).length 
+    : stories.length;
+
   return (
     <div className="max-w-7xl mx-auto p-8 bg-gray-50/30 min-h-screen font-sans">
       {/* HEADER */}
@@ -399,14 +463,14 @@ export default function PartnerStories() {
             Temporada {selectedSeason}
           </p>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap gap-4 items-center">
           <button
             onClick={exportToDoc}
-            className="bg-gray-900 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center gap-2"
+            className="bg-gray-900 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center gap-2 w-full md:w-auto justify-center"
           >
             <FileText size={16} /> Exportar
           </button>
-          <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
+          <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm w-full md:w-auto">
             <button
               onClick={() => setActiveTab("PLAN")}
               className={`px-6 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all ${activeTab === "PLAN" ? "bg-brand text-white shadow-md" : "text-gray-400 hover:bg-gray-50"}`}
@@ -482,9 +546,9 @@ export default function PartnerStories() {
       <div className="flex overflow-x-auto pb-4 mb-6 gap-2 custom-scrollbar">
         <button
           onClick={() => setSelectedMonthTab("Todos")}
-          className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border ${selectedMonthTab === "Todos" ? "bg-gray-800 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+          className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border transition-all ${selectedMonthTab === "Todos" ? "bg-gray-800 text-white shadow-md" : "bg-white text-gray-500 hover:bg-gray-50"}`}
         >
-          Todas ({displayedStories.length})
+          Todas ({totalCountForActiveTab})
         </button>
         {MONTHS_LIST.map((m) => {
           const count =
@@ -581,7 +645,15 @@ export default function PartnerStories() {
                 }
               />
             </div>
-            <div className="col-span-12 md:col-span-2">
+            <div className="col-span-12">
+              <textarea
+                placeholder="Comentarios / Notas internas sobre esta historia (opcional)..."
+                className="w-full bg-gray-50 p-4 rounded-xl text-xs outline-none border focus:border-brand min-h-[100px] font-medium"
+                value={formData.comments}
+                onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
+              />
+            </div>
+            <div className="col-span-12 md:col-span-2 md:col-start-11">
               <button
                 onClick={handleSubmit}
                 className="w-full bg-gray-900 text-white p-3 rounded-xl font-bold text-xs uppercase hover:bg-black transition-colors"
@@ -769,28 +841,58 @@ export default function PartnerStories() {
                   )}
                 </div>
 
-                {/* 4. USO FINAL */}
-                <div className="flex items-center gap-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase whitespace-nowrap">
-                    Uso Final:
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-white border border-gray-200 p-2 rounded-lg text-xs outline-none focus:border-brand"
-                    placeholder="Ej: Publicado el 12/05..."
-                    value={story.usage_details || ""}
-                    onChange={(e) =>
-                      updateUsageDetails(story.id, e.target.value)
-                    }
-                    onBlur={(e) => saveUsageDetails(story.id, e.target.value)}
-                  />
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Comentarios Editoriales */}
+                  <div className="flex-1 flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                      <Edit size={12} /> Sugerencias / Comentarios:
+                    </label>
+                    <textarea
+                      className="w-full bg-white border border-gray-200 p-3 rounded-xl text-xs outline-none focus:border-brand min-h-[80px] shadow-inner font-medium leading-relaxed italic"
+                      placeholder="Agrega notas editoriales para esta historia..."
+                      value={story.comments || ""}
+                      onChange={(e) => updateComments(story.id, e.target.value)}
+                      onBlur={(e) => saveComments(story.id, e.target.value)}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+
+                  {/* Uso Final */}
+                  <div className="flex flex-col gap-2 md:w-1/3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Uso Final:
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-white border border-gray-200 p-3 rounded-xl text-xs outline-none focus:border-brand shadow-inner font-bold uppercase transition-all"
+                      placeholder="Ej: Publicado 12/05..."
+                      value={story.usage_details || ""}
+                      onChange={(e) => updateUsageDetails(story.id, e.target.value)}
+                      onBlur={(e) => saveUsageDetails(story.id, e.target.value)}
+                      disabled={isReadOnly}
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
-              <div
-                className="text-sm text-gray-700 leading-relaxed pl-4 border-l-4 border-gray-100 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: story.content }}
-              />
+              <div className="flex flex-col gap-4">
+                <div
+                  className="text-sm text-gray-700 leading-relaxed pl-4 border-l-4 border-gray-100 prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: story.content || "" }}
+                />
+                
+                {/* Visualización de comentario en el Banco si existe */}
+                {story.comments && (
+                  <div className="mt-2 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                      <Edit size={12} /> Comentario del Editor
+                    </p>
+                    <p className="text-xs text-brand/70 italic font-medium leading-relaxed">
+                      "{story.comments}"
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex justify-between items-center pt-4 mt-4 border-t border-gray-50">
