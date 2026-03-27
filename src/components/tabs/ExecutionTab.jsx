@@ -212,10 +212,24 @@ export default function ExecutionTab({
     setNewSubtaskText("");
     updateProgress(newSubtasks);
   };
+  /**
+   * Alterna el estado de una subtarea y registra automáticamente la fecha de completado.
+   * Si se marca como hecha, se añade 'completed_at' con la fecha actual.
+   * Si se desmarca, se elimina dicho registro para mantener la integridad de los datos.
+   */
   const toggleSubtask = (id) => {
-    const newSubtasks = subtasks.map((t) =>
-      t.id === id ? { ...t, completed: !t.completed } : t,
-    );
+    const today = new Date().toISOString().split("T")[0];
+    const newSubtasks = subtasks.map((t) => {
+      if (t.id === id) {
+        const isNowCompleted = !t.completed;
+        return {
+          ...t,
+          completed: isNowCompleted,
+          completed_at: isNowCompleted ? today : null,
+        };
+      }
+      return t;
+    });
     setSubtasks(newSubtasks);
     updateProgress(newSubtasks);
   };
@@ -358,6 +372,16 @@ export default function ExecutionTab({
                     >
                       {t.description}
                     </p>
+                    {/* INDICADOR DE SUBTAREAS: Muestra el progreso de pasos completados vs total */}
+                    {t.subtasks && t.subtasks.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
+                        <CheckSquare size={10} className="text-brand/50" />
+                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter">
+                          {t.subtasks.filter((s) => s.completed).length}/
+                          {t.subtasks.length} PASOS
+                        </span>
+                      </div>
+                    )}
                     {t.status === "COMPLETADO" && (
                       <div className="mt-2 flex justify-end">
                         <CheckCircle2 size={12} className="text-emerald-500" />
@@ -517,11 +541,24 @@ export default function ExecutionTab({
                         >
                           {i.completed && <Check size={10} strokeWidth={4} />}
                         </button>
-                        <span
-                          className={`text-xs font-medium flex-1 truncate ${i.completed ? "text-gray-400 line-through" : "text-gray-700"}`}
-                        >
-                          {i.text}
-                        </span>
+                        <div className="flex flex-col flex-1 truncate">
+                          <span
+                            className={`text-xs font-medium truncate ${i.completed ? "text-gray-400 line-through" : "text-gray-700"}`}
+                          >
+                            {i.text}
+                          </span>
+                          {i.completed && i.completed_at && (
+                            <span className="text-[9px] font-bold text-emerald-600 uppercase">
+                              Concluido el:{" "}
+                              {new Date(
+                                i.completed_at + "T12:00:00",
+                              ).toLocaleDateString("es-ES", {
+                                day: "numeric",
+                                month: "short",
+                              })}
+                            </span>
+                          )}
+                        </div>
                         <button
                           onClick={() => deleteSubtask(i.id)}
                           className="text-gray-300 hover:text-red-500"
