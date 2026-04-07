@@ -17,6 +17,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
 import {
+  readMilkywireFeatureEnabled,
+  writeMilkywireFeatureEnabled,
+  subscribeMilkywireFeatureEnabled,
+} from "../../lib/milkywireFeature";
+import {
   Users,
   Settings2,
   ExternalLink,
@@ -44,6 +49,11 @@ import {
   BarChart3,
   FileText,
   Image as ImageIcon,
+  PauseCircle,
+  PlayCircle,
+  CheckCircle2,
+  Copy,
+  Eraser,
 } from "lucide-react";
 
 /**
@@ -93,30 +103,135 @@ export default function Supervision() {
 
   // --- CONFIGURACIÓN GLOBAL DE TEMPORADA (ADMIN ONLY) ---
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [settingsSeason, setSettingsSeason] = useState("2025-2026");
+  /** Temporada activa: solo valores que existen en BD (sin lista hardcodeada). */
+  const [activeSeason, setActiveSeason] = useState("");
+  const [availableSeasons, setAvailableSeasons] = useState([]);
+  const [seasonsLoading, setSeasonsLoading] = useState(true);
+  const [newSeasonName, setNewSeasonName] = useState("");
+  /** Temporada origen para "Duplicar configuración" (campañas + Milkywire). */
+  const [duplicateFromSeason, setDuplicateFromSeason] = useState("");
+  const [duplicatingConfig, setDuplicatingConfig] = useState(false);
   const [settingsTab, setSettingsTab] = useState("campaigns"); // Sub-pestaña: "campaigns" | "milkywire"
   const [seasonCampaigns, setSeasonCampaigns] = useState([]); // Lista dinámica de campañas globals
   const [newCampaignTitle, setNewCampaignTitle] = useState("");
   const [milkywireSchedule, setMilkywireSchedule] = useState([]); // Cronograma generado para Milkywire
   const [isGeneratingMilky, setIsGeneratingMilky] = useState(false);
+  /** Interruptor global: oculta Milkywire en parametrización, reportes e historial (localStorage). */
+  const [milkywireFeatureEnabled, setMilkywireFeatureEnabled] = useState(
+    readMilkywireFeatureEnabled,
+  );
+  const [clearingSeason, setClearingSeason] = useState(false);
 
   // Efecto inicial: Carga los datos maestros del dashboard
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Efecto para el modal de settings: Recarga la configuración cuando cambia la temporada seleccionada
+  // Catálogo de temporadas (header + formularios): al montar
+  useEffect(() => {
+    loadAvailableSeasons();
+  }, []);
+
+  useEffect(() => subscribeMilkywireFeatureEnabled(setMilkywireFeatureEnabled), []);
+
+  useEffect(() => {
+    if (!milkywireFeatureEnabled && settingsTab === "milkywire") {
+      setSettingsTab("campaigns");
+    }
+  }, [milkywireFeatureEnabled, settingsTab]);
+
+  // Si activas Milkywire de nuevo con el modal abierto, recarga el cronograma.
+  useEffect(() => {
+    if (isSettingsModalOpen && activeSeason) {
+      loadSeasonSettings(activeSeason);
+    }
+  }, [milkywireFeatureEnabled]);
+
+  // Misma temporada sugerida en nuevos reportes (solo si es una temporada válida en BD).
+  useEffect(() => {
+    if (!activeSeason) return;
+    try {
+      localStorage.setItem("aa_supervision_active_season", activeSeason);
+    } catch {
+      /* ignore */
+    }
+  }, [activeSeason]);
+
+  // Modal parametrización: recarga campañas/milkywire al abrir o al cambiar temporada activa
   useEffect(() => {
     if (isSettingsModalOpen) {
-      loadSeasonSettings(settingsSeason);
+      loadAvailableSeasons();
+      loadSeasonSettings(activeSeason);
     }
-  }, [isSettingsModalOpen, settingsSeason]);
+  }, [isSettingsModalOpen, activeSeason]);
+
+  // Origen por defecto para duplicar: última temporada distinta a la activa
+  useEffect(() => {
+    if (!isSettingsModalOpen) return;
+    const others = availableSeasons.filter((s) => s !== activeSeason);
+    if (others.length === 0) {
+      setDuplicateFromSeason("");
+      return;
+    }
+    setDuplicateFromSeason((prev) =>
+      prev && others.includes(prev) ? prev : others[others.length - 1],
+    );
+  }, [isSettingsModalOpen, activeSeason, availableSeasons]);
+
+  /**
+   * Temporadas = solo datos reales en Supabase:
+   * reportes (historial), campañas globales, milkywire, y registro explícito (season_registry).
+   * No se inventan años en el desplegable.
+   */
+  async function loadAvailableSeasons() {
+    setSeasonsLoading(true);
+    const bag = new Set();
+    try {
+      const [{ data: fromCamps }, { data: fromMilky }, { data: fromReports }] =
+        await Promise.all([
+          supabase.from("season_campaigns").select("season_name"),
+          supabase.from("milkywire_schedules").select("season_name"),
+          supabase.from("monthly_reports").select("season_name"),
+        ]);
+
+      (fromCamps || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      (fromMilky || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      (fromReports || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+
+      const regRes = await supabase.from("season_registry").select("season_name");
+      if (!regRes.error && regRes.data) {
+        regRes.data.forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      } else if (regRes.error) {
+        console.warn("season_registry (opcional):", regRes.error.message);
+      }
+    } catch (e) {
+      console.error("No se pudo cargar temporadas:", e);
+    }
+
+    const sorted = Array.from(bag).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    setAvailableSeasons(sorted);
+
+    setActiveSeason((prev) => {
+      if (sorted.length === 0) return "";
+      let stored;
+      try {
+        stored = localStorage.getItem("aa_supervision_active_season");
+      } catch {
+        stored = null;
+      }
+      if (stored && sorted.includes(stored)) return stored;
+      if (prev && sorted.includes(prev)) return prev;
+      return sorted[sorted.length - 1];
+    });
+    setSeasonsLoading(false);
+  }
 
   /**
    * Carga la configuración específica de una temporada (Campañas y Cronograma)
    * desde las tablas globales 'season_campaigns' y 'milkywire_schedules'.
    */
   async function loadSeasonSettings(season) {
+    if (!season) return;
     // 1. Campañas Globales: Influyen en qué opciones ven los socios en sus reportes mensuales
     const { data: camps } = await supabase
       .from("season_campaigns")
@@ -124,6 +239,11 @@ export default function Supervision() {
       .eq("season_name", season)
       .order("created_at", { ascending: true });
     setSeasonCampaigns(camps || []);
+
+    if (!milkywireFeatureEnabled) {
+      setMilkywireSchedule([]);
+      return;
+    }
 
     // 2. Cronograma Milkywire: Determina a quién le toca subir contenido este mes
     const { data: milky } = await supabase
@@ -196,7 +316,7 @@ export default function Supervision() {
             logo_url, 
             projects (
               *,
-              monthly_reports (id, report_month, report_year, photo_count)
+              monthly_reports (id, report_month, report_year, photo_count, season_name)
             )
           `,
         )
@@ -241,6 +361,14 @@ export default function Supervision() {
 
   // --- HELPERS (Utilidades de Renderizado) ---
 
+  /** Reportes mensuales de un paisaje filtrados por temporada (selector del header). */
+  const monthlyReportsForSeason = (project, season) => {
+    if (!season) return [];
+    const reps = project?.monthly_reports;
+    if (!Array.isArray(reps)) return [];
+    return reps.filter((r) => (r.season_name || "").trim() === season.trim());
+  };
+
   /**
    * Obtiene el email del usuario principal vinculado a un socio (Partner).
    */
@@ -251,36 +379,84 @@ export default function Supervision() {
 
   /**
    * Calcula estadísticas agregadas para un socio para mostrar en las tarjetas.
-   * Cuenta campañas donde participa, fotos totales en reportes y estado de actividad.
+   * Campañas = módulo general de campañas (no filtrado por temporada).
+   * Fotos y actividad = solo la temporada seleccionada en el header (evita mezclar 2025-26 con 2026-27).
    */
-  const getPartnerStats = (partner) => {
-    // Conteo de campañas activas (Basado en el array partner_ids de la tabla campaigns)
+  const getPartnerStats = (partner, season) => {
     const activeCampaignsCount = campaigns.filter(
       (c) => Array.isArray(c.partner_ids) && c.partner_ids.includes(partner.id),
     ).length;
 
-    // Conteo de contenido (Sumatoria de todas las fotos enviadas en reportes mensuales)
     let totalPhotos = 0;
     partner.projects?.forEach((proj) => {
-      proj.monthly_reports?.forEach((rep) => {
+      monthlyReportsForSeason(proj, season).forEach((rep) => {
         totalPhotos += parseInt(rep.photo_count || 0);
       });
     });
 
-    // Estado: Activo si tiene al menos un reporte mensual cargado
     const hasRecentActivity = partner.projects?.some(
-      (p) => p.monthly_reports?.length > 0,
+      (p) => monthlyReportsForSeason(p, season).length > 0,
     );
 
     return {
       campaigns: activeCampaignsCount,
       photos: totalPhotos,
-      status: hasRecentActivity ? "Activo" : "Sin Reportes",
+      status: hasRecentActivity ? "Activo" : "Sin reportes",
       statusColor: hasRecentActivity
         ? "text-emerald-500 bg-emerald-50"
         : "text-orange-500 bg-orange-50",
     };
   };
+
+  /**
+   * Elimina datos operativos de una temporada sin borrar el registro en season_registry
+   * ni socios/paisajes. Útil para una temporada nueva que quedó con datos duplicados o de prueba.
+   */
+  async function handleClearSeasonData() {
+    if (isReadOnly || !activeSeason || clearingSeason) return;
+    const s = activeSeason.trim();
+    if (
+      !confirm(
+        `¿Vaciar por completo la temporada ${s}?\n\n` +
+          "Se eliminarán:\n" +
+          "• Todos los reportes mensuales guardados con esa temporada\n" +
+          "• Campañas globales de parametrización (season_campaigns)\n" +
+          "• Cronograma Milkywire de esa temporada\n\n" +
+          "No se borra el registro de la temporada (sigue en la lista), ni socios ni paisajes.",
+      )
+    )
+      return;
+
+    setClearingSeason(true);
+    try {
+      const { error: eRep } = await supabase
+        .from("monthly_reports")
+        .delete()
+        .eq("season_name", s);
+      if (eRep) throw eRep;
+
+      const { error: eCamp } = await supabase
+        .from("season_campaigns")
+        .delete()
+        .eq("season_name", s);
+      if (eCamp) throw eCamp;
+
+      const { error: eMilk } = await supabase
+        .from("milkywire_schedules")
+        .delete()
+        .eq("season_name", s);
+      if (eMilk) throw eMilk;
+
+      await fetchData();
+      await loadAvailableSeasons();
+      if (isSettingsModalOpen) await loadSeasonSettings(s);
+      alert(`Temporada ${s} vaciada.`);
+    } catch (e) {
+      alert(e?.message || "No se pudo vaciar la temporada.");
+    } finally {
+      setClearingSeason(false);
+    }
+  }
 
   // --- GESTIÓN DE DATOS (ACCIONES PROTEGIDAS) ---
 
@@ -299,6 +475,32 @@ export default function Supervision() {
       else fetchData();
     }
   }
+
+  /**
+   * Actualiza el estado operativo de un paisaje/proyecto.
+   * Estados sugeridos para operación: ACTIVO, PAUSADO, CERRADO.
+   */
+  async function updateProjectStatus(projectId, targetStatus) {
+    if (isReadOnly) return;
+    const { error } = await supabase
+      .from("projects")
+      .update({ status: targetStatus })
+      .eq("id", projectId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    fetchData();
+  }
+
+  const normalizeProjectStatus = (status) => (status || "ACTIVO").toUpperCase();
+
+  const getProjectStatusPill = (status) => {
+    const s = normalizeProjectStatus(status);
+    if (s === "CERRADO") return "bg-gray-200 text-gray-600";
+    if (s === "PAUSADO") return "bg-amber-100 text-amber-700";
+    return "bg-emerald-100 text-emerald-700";
+  };
 
   /**
    * handleCreateUser: Registra un nuevo acceso en Supabase Auth y crea el perfil en 'profiles'.
@@ -359,13 +561,13 @@ export default function Supervision() {
   const handleAddSeasonCampaign = async () => {
     if (!newCampaignTitle.trim()) return;
     const { error } = await supabase.from("season_campaigns").insert([{
-      season_name: settingsSeason,
+      season_name: activeSeason,
       title: newCampaignTitle.trim()
     }]);
     if (error) alert(error.message);
     else {
       setNewCampaignTitle("");
-      loadSeasonSettings(settingsSeason);
+      loadSeasonSettings(activeSeason);
     }
   };
 
@@ -376,8 +578,105 @@ export default function Supervision() {
     if (confirm("¿Eliminar campaña global?")) {
       const { error } = await supabase.from("season_campaigns").delete().eq("id", id);
       if (error) alert(error.message);
-      else loadSeasonSettings(settingsSeason);
+      else loadSeasonSettings(activeSeason);
     }
+  };
+
+  /**
+   * Copia campañas globales y cronograma Milkywire de una temporada a otra.
+   * No modifica monthly_reports (histórico de socios permanece intacto).
+   */
+  const handleDuplicateSeasonConfig = async () => {
+    const fromSeason = duplicateFromSeason;
+    const toSeason = activeSeason;
+    if (!fromSeason || fromSeason === toSeason) {
+      alert("Elige una temporada origen distinta a la que estás editando.");
+      return;
+    }
+    const copyMilky = milkywireFeatureEnabled;
+    if (
+      !confirm(
+        `¿Copiar configuración de ${fromSeason} → ${toSeason}?\n\n` +
+          (copyMilky
+            ? "Se reemplazarán las campañas globales y el cronograma Milkywire de la temporada destino. "
+            : "Se reemplazarán solo las campañas globales de la temporada destino (Milkywire desactivado en el panel). ") +
+          "Los reportes mensuales guardados no se modifican.",
+      )
+    )
+      return;
+    setDuplicatingConfig(true);
+    try {
+      await supabase.from("season_campaigns").delete().eq("season_name", toSeason);
+      const { data: camps, error: errCamps } = await supabase
+        .from("season_campaigns")
+        .select("*")
+        .eq("season_name", fromSeason);
+      if (errCamps) throw errCamps;
+      if (camps?.length) {
+        const rows = camps.map(({ id: _id, ...rest }) => ({
+          ...rest,
+          season_name: toSeason,
+        }));
+        const { error: insC } = await supabase.from("season_campaigns").insert(rows);
+        if (insC) throw insC;
+      }
+
+      if (copyMilky) {
+        await supabase.from("milkywire_schedules").delete().eq("season_name", toSeason);
+        const { data: milky, error: errM } = await supabase
+          .from("milkywire_schedules")
+          .select("*")
+          .eq("season_name", fromSeason);
+        if (errM) throw errM;
+        if (milky?.length) {
+          const rows = milky.map(({ id: _id, ...rest }) => ({
+            ...rest,
+            season_name: toSeason,
+          }));
+          const { error: insM } = await supabase.from("milkywire_schedules").insert(rows);
+          if (insM) throw insM;
+        }
+      }
+
+      await loadSeasonSettings(toSeason);
+      alert("✅ Configuración duplicada en la temporada destino.");
+    } catch (e) {
+      alert(e?.message || "Error al duplicar.");
+    } finally {
+      setDuplicatingConfig(false);
+    }
+  };
+
+  /**
+   * Crea una nueva temporada a nivel de configuración.
+   * Nota: no borra ni sobreescribe históricos; solo habilita la temporada para parametrizarla.
+   */
+  const handleCreateSeason = async () => {
+    const season = newSeasonName.trim();
+    if (!season) return;
+    if (!/^\d{4}-\d{4}$/.test(season)) {
+      alert("Formato inválido. Usa AAAA-AAAA (ej: 2026-2027).");
+      return;
+    }
+    if (availableSeasons.includes(season)) {
+      setActiveSeason(season);
+      setNewSeasonName("");
+      return;
+    }
+    const { error } = await supabase.from("season_registry").insert({ season_name: season });
+    if (error) {
+      if (error.code === "42P01" || error.message?.includes("season_registry")) {
+        alert(
+          "Falta aplicar la migración en Supabase (tabla season_registry). Revisa el archivo supabase/migrations/20260406120000_season_registry.sql o ejecuta el SQL en el dashboard.",
+        );
+      } else {
+        alert(error.message);
+      }
+      return;
+    }
+    await loadAvailableSeasons();
+    setActiveSeason(season);
+    setNewSeasonName("");
   };
 
   /**
@@ -393,12 +692,13 @@ export default function Supervision() {
    * 4. Asigna 3 a cada mes, validando que un socio no se repita en el mismo mes.
    */
   const handleGenerateMilkywire = async () => {
+    if (!milkywireFeatureEnabled) return;
     if (!confirm("Se generará un nuevo cronograma equitativo (3 cupos x mes). ¿Continuar?")) return;
 
     setIsGeneratingMilky(true);
     try {
       // 1. Reset de la temporada
-      await supabase.from("milkywire_schedules").delete().eq("season_name", settingsSeason);
+      await supabase.from("milkywire_schedules").delete().eq("season_name", activeSeason);
 
       // 2. Obtención de participantes
       const { data: activePartners } = await supabase.from("partners").select("id").eq("is_active", true);
@@ -440,7 +740,7 @@ export default function Supervision() {
           if (!assignedInThisMonth.has(candidate)) {
             assignedInThisMonth.add(candidate);
             newSchedules.push({
-              season_name: settingsSeason,
+              season_name: activeSeason,
               target_month: month,
               partner_id: candidate
             });
@@ -456,7 +756,7 @@ export default function Supervision() {
       const { error: insErr } = await supabase.from("milkywire_schedules").insert(newSchedules);
       if (insErr) throw insErr;
 
-      loadSeasonSettings(settingsSeason);
+      loadSeasonSettings(activeSeason);
       alert("Cronograma generado exitosamente.");
 
     } catch (err) {
@@ -502,6 +802,90 @@ export default function Supervision() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3 items-center w-full sm:w-auto">
+          {/* Temporada en contexto: solo temporadas que existen en datos reales (reportes / config / registro). */}
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-sm">
+            <Calendar size={16} className="text-brand shrink-0" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">
+                Temporada
+              </span>
+              {seasonsLoading ? (
+                <span className="text-[10px] font-bold text-gray-400 italic">Cargando…</span>
+              ) : availableSeasons.length === 0 ? (
+                <span className="text-[10px] font-bold text-amber-600 max-w-[200px] leading-tight" title="Aún no hay season_name en reportes ni parametrización">
+                  Sin temporadas en BD
+                </span>
+              ) : (
+                <select
+                  value={activeSeason || availableSeasons[0]}
+                  onChange={(e) => setActiveSeason(e.target.value)}
+                  className="bg-transparent text-xs font-black text-gray-900 uppercase outline-none cursor-pointer max-w-[148px] sm:max-w-[200px] truncate"
+                  title="Solo aparecen años que ya existen en reportes o configuración"
+                >
+                  {availableSeasons.map((season) => (
+                    <option key={season} value={season}>
+                      {season}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {availableSeasons.length > 0 && activeSeason && (
+                <p className="text-[8px] text-gray-400 font-bold leading-tight mt-1 max-w-[220px]">
+                  Métricas de tarjetas (fotos / estado) solo para esta temporada.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {!isReadOnly && availableSeasons.length > 0 && activeSeason && (
+            <button
+              type="button"
+              onClick={handleClearSeasonData}
+              disabled={clearingSeason || seasonsLoading}
+              className="flex items-center gap-2 bg-white border border-amber-200 text-amber-800 px-4 py-2.5 rounded-2xl font-black text-[9px] uppercase tracking-widest hover:bg-amber-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Borra reportes y parametrización de esta temporada; no borra el alta de la temporada ni socios."
+            >
+              <Eraser size={14} className="shrink-0" />
+              {clearingSeason ? "Vaciando…" : "Vaciar temporada"}
+            </button>
+          )}
+
+          {/* Milkywire: activar / ocultar en toda la supervisión (persistente en este navegador) */}
+          <div
+            className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-sm"
+            title="Desactiva donante Milkywire: no aparece en parametrización, reportes mensuales ni historial. Puedes volver a activarlo cuando quieras."
+          >
+            <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">
+              Milkywire
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={milkywireFeatureEnabled}
+              onClick={() => {
+                const next = !milkywireFeatureEnabled;
+                writeMilkywireFeatureEnabled(next);
+                setMilkywireFeatureEnabled(next);
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                milkywireFeatureEnabled ? "bg-emerald-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  milkywireFeatureEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <span
+              className={`text-[9px] font-black uppercase max-w-[72px] leading-tight ${
+                milkywireFeatureEnabled ? "text-emerald-700" : "text-gray-400"
+              }`}
+            >
+              {milkywireFeatureEnabled ? "Visible" : "Oculto"}
+            </span>
+          </div>
+
           {/* Switch de Pestañas: Socios vs Usuarios */}
           <div className="bg-gray-100 p-1 rounded-xl flex">
             <button
@@ -616,7 +1000,7 @@ export default function Supervision() {
                   {filteredPartners.map((partner) => {
                     const dynamicEmail = getPartnerEmail(partner.id);
                     const hasUser = dynamicEmail.includes("@");
-                    const stats = getPartnerStats(partner);
+                    const stats = getPartnerStats(partner, activeSeason);
 
                     return (
                       <div
@@ -650,6 +1034,7 @@ export default function Supervision() {
                                   </span>
                                 </div>
                                 <span
+                                  title="Actividad según la temporada seleccionada arriba"
                                   className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${stats.statusColor}`}
                                 >
                                   {stats.status}
@@ -701,7 +1086,10 @@ export default function Supervision() {
                             </span>
                           </div>
                           <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1">
+                            <span
+                              title="Suma de fotos en reportes de la temporada seleccionada"
+                              className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1"
+                            >
                               <ImageIcon size={10} /> Contenido
                             </span>
                             <span className="text-lg font-black text-gray-900">
@@ -732,7 +1120,7 @@ export default function Supervision() {
                             )}
                           </div>
                           <div className="space-y-2">
-                            {partner.projects?.slice(0, 3).map((project) => (
+                            {partner.projects?.map((project) => (
                               <div
                                 key={project.id}
                                 className={`flex justify-between items-center p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand/30 transition-all cursor-pointer group/item`}
@@ -753,13 +1141,54 @@ export default function Supervision() {
                                   <div className="p-1.5 bg-white rounded-lg text-gray-300 group-hover/item:text-brand transition-colors">
                                     <MapPin size={14} />
                                   </div>
-                                  <span className="text-xs font-bold text-gray-700 uppercase">
-                                    {project.name}
-                                  </span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-gray-700 uppercase">
+                                      {project.name}
+                                    </span>
+                                    <span
+                                      className={`text-[8px] font-black uppercase w-fit mt-1 px-1.5 py-0.5 rounded ${getProjectStatusPill(project.status)}`}
+                                    >
+                                      {normalizeProjectStatus(project.status)}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {/* BOTÓN SETTINGS PAISAJE: OCULTO SI ES READONLY */}
                                 <div className="flex items-center gap-1">
+                                  {!isReadOnly && (
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateProjectStatus(project.id, "PAUSADO");
+                                        }}
+                                        className="p-1.5 text-gray-300 hover:text-amber-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                        title="Pausar paisaje"
+                                      >
+                                        <PauseCircle size={14} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateProjectStatus(project.id, "ACTIVO");
+                                        }}
+                                        className="p-1.5 text-gray-300 hover:text-emerald-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                        title="Reactivar paisaje"
+                                      >
+                                        <PlayCircle size={14} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateProjectStatus(project.id, "CERRADO");
+                                        }}
+                                        className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                        title="Cerrar proyecto"
+                                      >
+                                        <CheckCircle2 size={14} />
+                                      </button>
+                                    </>
+                                  )}
                                   {!isReadOnly && (
                                     <button
                                       onClick={(e) => {
@@ -772,6 +1201,11 @@ export default function Supervision() {
                                       <Settings size={14} />
                                     </button>
                                   )}
+                                  {!isReadOnly && normalizeProjectStatus(project.status) === "CERRADO" && (
+                                    <span className="text-[8px] font-black text-gray-400 uppercase px-1">
+                                      Finalizado
+                                    </span>
+                                  )}
                                   <ChevronRight
                                     size={14}
                                     className="text-gray-300 group-hover/item:text-brand"
@@ -782,11 +1216,6 @@ export default function Supervision() {
                             {partner.projects?.length === 0 && (
                               <p className="text-[10px] text-gray-300 italic">
                                 No hay paisajes registrados.
-                              </p>
-                            )}
-                            {partner.projects?.length > 3 && (
-                              <p className="text-[9px] text-center text-gray-400 font-bold mt-2">
-                                ... y {partner.projects.length - 3} más
                               </p>
                             )}
                           </div>
@@ -1094,14 +1523,89 @@ export default function Supervision() {
                   <label className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">Temporada:</label>
                   <select
                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl sm:rounded-2xl p-3 sm:p-4 font-black shadow-sm outline-none focus:border-brand cursor-pointer uppercase text-xs sm:text-sm"
-                    value={settingsSeason}
-                    onChange={(e) => setSettingsSeason(e.target.value)}
+                    value={activeSeason}
+                    onChange={(e) => setActiveSeason(e.target.value)}
                   >
-                    <option value="2024-2025">2024-2025</option>
-                    <option value="2025-2026">2025-2026</option>
-                    <option value="2026-2027">2026-2027</option>
-                    <option value="2027-2028">2027-2028</option>
+                    {availableSeasons.map((season) => (
+                      <option key={season} value={season}>
+                        {season}
+                      </option>
+                    ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">
+                    Nueva temporada
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newSeasonName}
+                      onChange={(e) => setNewSeasonName(e.target.value)}
+                      placeholder="2026-2027"
+                      className="flex-1 bg-gray-50 border-2 border-gray-100 rounded-xl p-3 font-bold text-xs outline-none focus:border-brand"
+                    />
+                    <button
+                      onClick={handleCreateSeason}
+                      type="button"
+                      className="bg-brand text-white px-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-700 transition-colors"
+                    >
+                      Crear
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-gray-400 font-medium mt-1.5 leading-snug">
+                    Tras crear, queda seleccionada arriba y en esta pantalla. El histórico de reportes no se borra.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-dashed border-brand/30 bg-brand/5 p-4 space-y-3">
+                  <p className="text-[10px] font-black text-brand uppercase tracking-widest">
+                    Duplicar configuración
+                  </p>
+                  <p className="text-[9px] text-gray-500 leading-relaxed">
+                    Copia{" "}
+                    {milkywireFeatureEnabled
+                      ? "campañas globales y cronograma Milkywire"
+                      : "solo las campañas globales (Milkywire oculto en el panel)"}{" "}
+                    desde otra temporada hacia <strong>{activeSeason}</strong>. Los reportes mensuales
+                    (historial) no se modifican.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                      Origen
+                    </label>
+                    <select
+                      className="w-full bg-white border-2 border-gray-100 rounded-xl p-3 font-bold text-xs outline-none focus:border-brand uppercase"
+                      value={duplicateFromSeason}
+                      onChange={(e) => setDuplicateFromSeason(e.target.value)}
+                    >
+                      {availableSeasons.filter((s) => s !== activeSeason).length === 0 ? (
+                        <option value="">No hay otra temporada</option>
+                      ) : (
+                        availableSeasons
+                          .filter((s) => s !== activeSeason)
+                          .map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))
+                      )}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDuplicateSeasonConfig}
+                    disabled={
+                      duplicatingConfig ||
+                      !duplicateFromSeason ||
+                      duplicateFromSeason === activeSeason
+                    }
+                    className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Copy size={14} />
+                    {duplicatingConfig ? "Copiando…" : `Copiar hacia ${activeSeason}`}
+                  </button>
                 </div>
 
                 <div className="flex md:flex-col gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
@@ -1111,13 +1615,22 @@ export default function Supervision() {
                   >
                     <Megaphone size={16} className="shrink-0" /> Campañas
                   </button>
-                  <button
-                    onClick={() => setSettingsTab("milkywire")}
-                    className={`flex-1 md:flex-none p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left uppercase text-[9px] sm:text-xs font-black tracking-widest transition-all flex items-center gap-2 sm:gap-3 whitespace-nowrap ${settingsTab === "milkywire" ? "border-brand bg-brand/5 text-brand" : "border-gray-50 bg-gray-50 text-gray-400 hover:text-gray-600 hover:border-gray-200"}`}
-                  >
-                    <MapPin size={16} className="shrink-0" /> Milkywire
-                  </button>
+                  {milkywireFeatureEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsTab("milkywire")}
+                      className={`flex-1 md:flex-none p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 text-left uppercase text-[9px] sm:text-xs font-black tracking-widest transition-all flex items-center gap-2 sm:gap-3 whitespace-nowrap ${settingsTab === "milkywire" ? "border-brand bg-brand/5 text-brand" : "border-gray-50 bg-gray-50 text-gray-400 hover:text-gray-600 hover:border-gray-200"}`}
+                    >
+                      <MapPin size={16} className="shrink-0" /> Milkywire
+                    </button>
+                  )}
                 </div>
+                {!milkywireFeatureEnabled && (
+                  <p className="text-[9px] text-amber-700 font-bold leading-snug bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    Milkywire está desactivado en el encabezado de Supervisión. Actívalo ahí para
+                    gestionar el cronograma o duplicarlo entre temporadas.
+                  </p>
+                )}
               </div>
 
               {/* Col Der: Configuración */}
@@ -1139,7 +1652,7 @@ export default function Supervision() {
 
                     <div className="space-y-2 mt-4">
                       {seasonCampaigns.length === 0 ? (
-                        <div className="p-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay campañas para {settingsSeason}</div>
+                        <div className="p-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay campañas para {activeSeason}</div>
                       ) : (
                         seasonCampaigns.map(camp => (
                           <div key={camp.id} className="flex justify-between items-center bg-white border border-gray-100 p-4 rounded-2xl shadow-sm hover:border-brand/30 transition-colors">
@@ -1152,7 +1665,7 @@ export default function Supervision() {
                   </div>
                 )}
 
-                {settingsTab === "milkywire" && (
+                {milkywireFeatureEnabled && settingsTab === "milkywire" && (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-gray-100 pb-4 gap-4">
                       <div>
@@ -1166,7 +1679,7 @@ export default function Supervision() {
 
                     <div className="mt-6 flex flex-col gap-4">
                       {milkywireSchedule.length === 0 ? (
-                        <div className="p-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay distribución generada para {settingsSeason}. ¡Haz clic arriba!</div>
+                        <div className="p-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay distribución generada para {activeSeason}. ¡Haz clic arriba!</div>
                       ) : (
                         ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map(mes => {
                           const sociosMes = milkywireSchedule.filter(m => m.target_month === mes);

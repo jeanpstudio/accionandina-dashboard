@@ -148,6 +148,20 @@ export default function AdminDashboard() {
         .eq("month_key", monthKey)
         .order("priority", { ascending: true });
 
+      /**
+       * Tareas por rango de ejecución:
+       * Incluimos tareas cuyo periodo (start_date/end_date) cruza el mes visualizado,
+       * aunque su month_key sea de otro mes. Esto permite que actividades de larga
+       * duración (ej: enero-marzo) se vean en todos los meses que abarcan.
+       */
+      const { data: spanningTasks } = await supabase
+        .from("personal_tasks")
+        .select("*")
+        .lte("start_date", toLocalISOString(endOfMonth))
+        .or(
+          `end_date.gte.${toLocalISOString(startOfMonth)},and(end_date.is.null,start_date.gte.${toLocalISOString(startOfMonth)})`,
+        );
+
       // LÓGICA DE BACKLOG REAL:
       // Buscamos tareas de meses pasados que aún NO tengan status 'COMPLETADO'.
       // Esto garantiza que nada se quede en el olvido.
@@ -163,8 +177,15 @@ export default function AdminDashboard() {
         is_backlog: true,
       }));
 
-      // Unimos la lista completa para el renderizado
-      const allTasks = [...cleanBacklog, ...(currentTasks || [])];
+      // Unimos y deduplicamos por id para evitar repeticiones entre fuentes.
+      const taskMap = new Map();
+      [...(currentTasks || []), ...(spanningTasks || []), ...cleanBacklog].forEach(
+        (t) => {
+          const existing = taskMap.get(t.id);
+          taskMap.set(t.id, existing ? { ...existing, ...t } : t);
+        },
+      );
+      const allTasks = Array.from(taskMap.values());
 
       setTasks(allTasks);
       setCategories(catData || []);

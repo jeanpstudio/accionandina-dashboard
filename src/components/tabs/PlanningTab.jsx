@@ -94,13 +94,21 @@ export default function PlanningTab({
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
     if (!taskId) return;
+
+    /**
+     * IMPORTANTE (regla de negocio):
+     * Arrastrar en la pestaña de Planificación SOLO reubica la tarea en una semana (target_week).
+     * No debe:
+     * - cambiar el `month_key` (eso haría que "desaparezca" del mes donde fue creada),
+     * - ni resetear `start_date` / `end_date` (esas fechas las define el usuario en Ejecución).
+     *
+     * Si una tarea ya tiene fechas, su visibilidad semanal la determina el rango de fechas
+     * (ver `isTaskVisibleInWeek`). Por eso aquí no tocamos fechas.
+     */
     await supabase
       .from("personal_tasks")
       .update({
         target_week: targetWeek,
-        start_date: null,
-        end_date: null,
-        month_key: monthKey,
       })
       .eq("id", taskId);
     onUpdate();
@@ -125,6 +133,7 @@ export default function PlanningTab({
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const currentMonthDate = new Date(currentYear, currentMonth, 1);
+    const viewingMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
     // 1. Tareas sin fechas: Respetamos target_week o forzamos Semana 1 si es backlog
     if (!task.start_date) {
@@ -137,6 +146,19 @@ export default function PlanningTab({
     const taskEnd = task.end_date
       ? new Date(task.end_date + "T12:00:00")
       : taskStart;
+
+    /**
+     * Regla clave:
+     * Si la tarea pertenece al mes que se está viendo (month_key),
+     * siempre debe ser visible en su semana planificada, aunque su rango
+     * de ejecución (start/end) haya quedado en otro mes por una ejecución extendida.
+     *
+     * Esto evita inconsistencias donde en el resumen aparece la tarea del mes,
+     * pero en columnas semanales "desaparece" por tener fechas fuera de mes.
+     */
+    if (task.month_key === viewingMonthKey) {
+      return parseInt(task.target_week) === weekNum;
+    }
 
     // Prorrogar visibilidad si está pendiente y terminó antes del mes actual (Overdue)
     if (task.status !== "COMPLETADO" && taskEnd < currentMonthDate) {

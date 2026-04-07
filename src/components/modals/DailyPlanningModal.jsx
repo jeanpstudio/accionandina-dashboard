@@ -8,7 +8,7 @@
  * va a abordar hoy, permitiéndole detallar esfuerzos y subpasos de una vez.
  * 
  * LÓGICA:
- * 1. FILTRADO: Muestra tareas de la semana actual del mes o del backlog (pendientes).
+ * 1. FILTRADO: Muestra todas las tareas pendientes disponibles del mes (y backlog cargado).
  * 2. SELECCIÓN: El usuario marca las tareas "Para Hoy".
  * 3. EDICIÓN: Solo las seleccionadas despliegan campos de detalle (Minutos, Link, Subtareas).
  * 4. PERSISTENCIA: Actualiza 'start_date' y 'end_date' a la fecha actual en Supabase.
@@ -40,7 +40,7 @@ export default function DailyPlanningModal({
     // --- ESTADOS LOCALES ---
     const [step, setStep] = useState(1); // 1: Selección | 2: Detalle
     const [selectedIds, setSelectedIds] = useState([]);
-    const [taskDetails, setTaskDetails] = useState({}); // { id: { estimated_hours, resource_link, subtasks } }
+    const [taskDetails, setTaskDetails] = useState({}); // { id: { start_date, end_date, estimated_hours, resource_link, subtasks } }
 
     // Al abrir el modal, inicializamos los estados basados en las tareas del día (si ya existen)
     useEffect(() => {
@@ -52,6 +52,8 @@ export default function DailyPlanningModal({
             const initialDetails = {};
             todayTasks.forEach(t => {
                 initialDetails[t.id] = {
+                    start_date: t.start_date || "",
+                    end_date: t.end_date || "",
                     estimated_hours: t.estimated_hours || 0,
                     resource_link: t.resource_link || "",
                     subtasks: t.subtasks || []
@@ -65,19 +67,11 @@ export default function DailyPlanningModal({
     if (!isOpen) return null;
 
     // --- LÓGICA DE FILTRADO ---
-    // Tareas de la semana actual o backlog que no están completadas
-    const currentMonth = currentDate.getMonth();
-    const currentYear = currentDate.getFullYear();
-    const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-    const todayDate = new Date().getDate();
-    const currentWeekNum = Math.ceil((todayDate + firstDayOfMonth) / 7);
-
+    // Tareas pendientes disponibles: sin restringir por semana.
+    // El usuario decide manualmente qué toma hoy y qué fechas asigna.
     const availableTasks = tasks.filter(t => {
         if (t.status === "COMPLETADO") return false;
-        // Si ya tiene fecha de hoy, la mostramos para editar
-        if (t.start_date === todayStr) return true;
-        // Backlog o semana actual
-        return t.is_backlog || parseInt(t.target_week) === currentWeekNum;
+        return true;
     });
 
     // --- HANDLERS ---
@@ -90,6 +84,8 @@ export default function DailyPlanningModal({
             setTaskDetails(prev => ({
                 ...prev,
                 [id]: {
+                    start_date: task?.start_date || "",
+                    end_date: task?.end_date || "",
                     estimated_hours: task?.estimated_hours || 0,
                     resource_link: task?.resource_link || "",
                     subtasks: task?.subtasks || []
@@ -129,25 +125,15 @@ export default function DailyPlanningModal({
 
     const handleSaveAll = async () => {
         try {
-            // 1. Desmarcar tareas que estaban para hoy pero se deseleccionaron
-            const todayTasks = tasks.filter(t => t.start_date === todayStr);
-            const toRemove = todayTasks.filter(t => !selectedIds.includes(t.id));
-
-            for (const t of toRemove) {
-                await supabase
-                    .from("personal_tasks")
-                    .update({ start_date: null, end_date: null })
-                    .eq("id", t.id);
-            }
-
-            // 2. Guardar/Actualizar seleccionadas
+            // Guardar/Actualizar seleccionadas (sin forzar fechas automáticas).
             for (const id of selectedIds) {
                 const detail = taskDetails[id];
                 await supabase
                     .from("personal_tasks")
                     .update({
-                        start_date: todayStr,
-                        end_date: todayStr,
+                        // Solo guardamos fechas si el usuario las indicó manualmente.
+                        ...(detail?.start_date ? { start_date: detail.start_date } : {}),
+                        ...(detail?.end_date ? { end_date: detail.end_date } : {}),
                         estimated_hours: detail.estimated_hours,
                         resource_link: detail.resource_link,
                         subtasks: detail.subtasks,
@@ -266,6 +252,30 @@ export default function DailyPlanningModal({
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                 {/* IZQUIERDA: TIEMPO Y LINK */}
                                                 <div className="space-y-6">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                                                                Fecha Inicio
+                                                            </label>
+                                                            <input
+                                                                type="date"
+                                                                className="w-full bg-white border border-gray-200 p-3 rounded-2xl text-xs font-medium outline-none focus:ring-2 focus:ring-brand/20 transition-all"
+                                                                value={detail.start_date || ""}
+                                                                onChange={(e) => updateDetail(id, 'start_date', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
+                                                                Fecha Fin
+                                                            </label>
+                                                            <input
+                                                                type="date"
+                                                                className="w-full bg-white border border-gray-200 p-3 rounded-2xl text-xs font-medium outline-none focus:ring-2 focus:ring-brand/20 transition-all"
+                                                                value={detail.end_date || ""}
+                                                                onChange={(e) => updateDetail(id, 'end_date', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                     <div>
                                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">
                                                             Minutos Estimados

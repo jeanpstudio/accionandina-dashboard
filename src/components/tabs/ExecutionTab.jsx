@@ -39,6 +39,9 @@ export default function ExecutionTab({
 }) {
   const [columnStartDate, setColumnStartDate] = useState(new Date());
 
+  const toYmd = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
   // --- MODALES ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -63,7 +66,10 @@ export default function ExecutionTab({
   const [newUrl, setNewUrl] = useState({ title: "", url: "" });
 
   useEffect(() => {
-    setColumnStartDate(new Date());
+    // Al cambiar de mes en el dashboard, anclamos la vista de ejecución al día 1 de ese mes.
+    setColumnStartDate(
+      new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+    );
   }, [currentDate]);
 
   // Helper Preview
@@ -85,9 +91,47 @@ export default function ExecutionTab({
     e.preventDefault();
     const taskId = e.dataTransfer.getData("taskId");
     if (!taskId) return;
+
+    /**
+     * Regla: el drag & drop en Ejecución NO debe borrar rangos definidos manualmente.
+     * - Si la tarea no tiene fechas: asignamos start/end al día destino (comportamiento actual).
+     * - Si tiene rango: desplazamos el rango manteniendo la misma duración.
+     *
+     * Nota: las fechas se guardan como 'YYYY-MM-DD'. Trabajamos en "mediodía" para evitar
+     * efectos de zona horaria al sumar/restar días.
+     */
+    const task = tasks.find((t) => String(t.id) === String(taskId));
+    if (!task) return;
+
+    const toNoonDate = (yyyyMmDd) => new Date(`${yyyyMmDd}T12:00:00`);
+    const toYmd = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const hasStart = Boolean(task.start_date);
+    const hasEnd = Boolean(task.end_date);
+
+    let nextStart = targetDateStr;
+    let nextEnd = targetDateStr;
+
+    if (hasStart) {
+      const prevStart = toNoonDate(task.start_date);
+      const prevEnd = hasEnd ? toNoonDate(task.end_date) : prevStart;
+      const durationDays = Math.max(
+        0,
+        Math.round((prevEnd - prevStart) / (1000 * 60 * 60 * 24)),
+      );
+
+      const destStart = toNoonDate(targetDateStr);
+      const destEnd = new Date(destStart);
+      destEnd.setDate(destEnd.getDate() + durationDays);
+
+      nextStart = toYmd(destStart);
+      nextEnd = toYmd(destEnd);
+    }
+
     await supabase
       .from("personal_tasks")
-      .update({ start_date: targetDateStr, end_date: targetDateStr })
+      .update({ start_date: nextStart, end_date: nextEnd })
       .eq("id", taskId);
     onUpdate();
   };
@@ -280,6 +324,7 @@ export default function ExecutionTab({
             <input
               type="date"
               className="text-xs font-bold outline-none text-gray-600 w-24 bg-transparent cursor-pointer"
+              value={toYmd(columnStartDate)}
               onChange={(e) => {
                 if (e.target.value) {
                   const [y, m, d] = e.target.value.split("-").map(Number);

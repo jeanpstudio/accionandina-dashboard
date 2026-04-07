@@ -20,7 +20,6 @@ import PartnerForm from "./features/supervision/PartnerForm";
 import GlobalReport from "./features/supervision/GlobalReport";
 import AdminDashboard from "./features/admin/AdminDashboard";
 import VideosDashboard from "./features/videos/VideosDashboard";
-import MeetingsDashboard from "./features/meetings/MeetingsDashboard";
 import HomeDashboard from "./features/dashboard/HomeDashboard";
 import MailingBuilder from "./features/mailing/MailingBuilder";
 import Prensa from "./features/prensa/Prensa";
@@ -93,7 +92,6 @@ export default function App() {
           {/* === OTROS MÓDULOS (Aún con placeholders) === */}
 
           <Route path="/videos" element={<VideosDashboard />} />
-          <Route path="meetings" element={<MeetingsDashboard />} />
           <Route path="mailing" element={<MailingBuilder />} />
           <Route path="/prensa" element={<Prensa />} />
           <Route path="/historias" element={<PartnerStories />} />

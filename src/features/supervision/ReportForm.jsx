@@ -15,6 +15,10 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
 import {
+  readMilkywireFeatureEnabled,
+  subscribeMilkywireFeatureEnabled,
+} from "../../lib/milkywireFeature";
+import {
   ArrowLeft,
   Save,
   Edit,
@@ -66,6 +70,10 @@ export default function ReportForm({ isViewMode = false }) {
   const [globalCampaigns, setGlobalCampaigns] = useState([]); // Campañas de temporada
   const [partnerCampaigns, setPartnerCampaigns] = useState([]); // Campañas del dashboard de campañas
   const [isMilkyMonth, setIsMilkyMonth] = useState(false); // ¿A este socio le toca Milkywire hoy?
+  const [availableSeasons, setAvailableSeasons] = useState([]);
+  const [milkywireFeatureEnabled, setMilkywireFeatureEnabled] = useState(
+    readMilkywireFeatureEnabled,
+  );
 
   // --- MODELO DE DATOS PRINCIPAL (Sincronizado con Supabase 'monthly_reports') ---
   const [formData, setFormData] = useState({
@@ -102,8 +110,6 @@ export default function ReportForm({ isViewMode = false }) {
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
   ];
 
-  const seasons = ["2024-2025", "2025-2026", "2026-2027", "2027-2028"];
-
   // Sanitización de datos: Asegura que campos JSONB sean siempre arrays para evitar errores de .map()
   const ensureArray = (data) => {
     if (!data) return [];
@@ -117,12 +123,56 @@ export default function ReportForm({ isViewMode = false }) {
     else fetchInitialDataForNew();
   }, [projectId, reportId]);
 
+  useEffect(() => {
+    loadAvailableSeasons();
+  }, [projectId]);
+
+  useEffect(() => subscribeMilkywireFeatureEnabled(setMilkywireFeatureEnabled), []);
+
+  useEffect(() => {
+    if (!milkywireFeatureEnabled) setIsMilkyMonth(false);
+  }, [milkywireFeatureEnabled]);
+
+  async function loadAvailableSeasons() {
+    const bag = new Set();
+    try {
+      const [{ data: seasonCamps }, { data: seasonMilky }, { data: projectReports }] =
+        await Promise.all([
+          supabase.from("season_campaigns").select("season_name"),
+          supabase.from("milkywire_schedules").select("season_name"),
+          supabase
+            .from("monthly_reports")
+            .select("season_name")
+            .eq("project_id", projectId),
+        ]);
+
+      (seasonCamps || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      (seasonMilky || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      (projectReports || []).forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+
+      const regRes = await supabase.from("season_registry").select("season_name");
+      if (!regRes.error && regRes.data) {
+        regRes.data.forEach((r) => r?.season_name && bag.add(r.season_name.trim()));
+      }
+    } catch (err) {
+      console.error("Error cargando temporadas:", err);
+    }
+    const seasons = Array.from(bag).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    setAvailableSeasons(seasons);
+    return seasons;
+  }
+
   // Sincronización Global: Cuando cambia el mes o temporada, re-calculamos si toca Milkywire o qué campañas mostrar.
   useEffect(() => {
     if (formData.season_name && project?.partners?.id) {
       loadGlobalSettings(formData.season_name, project.partners.id, formData.report_month);
     }
-  }, [formData.season_name, formData.report_month, project?.partners?.id]);
+  }, [
+    formData.season_name,
+    formData.report_month,
+    project?.partners?.id,
+    milkywireFeatureEnabled,
+  ]);
 
   /**
    * loadGlobalSettings: Cruza los datos del reporte actual con las configuraciones del Admin.
@@ -143,7 +193,9 @@ export default function ReportForm({ isViewMode = false }) {
       setPartnerCampaigns(partCamps || []);
 
       // 3. Verificamos el 'Chocolateo': ¿Está este socio agendado para Milkywire en este mes?
-      if (currentMonth) {
+      if (!milkywireFeatureEnabled) {
+        setIsMilkyMonth(false);
+      } else if (currentMonth) {
         const { data: milky } = await supabase.from("milkywire_schedules")
           .select("*")
           .eq("season_name", season)
@@ -172,6 +224,8 @@ export default function ReportForm({ isViewMode = false }) {
         .single();
       setProject(projData);
 
+      const seasonsSnapshot = await loadAvailableSeasons();
+
       // Obtenemos el último reporte para heredar configuraciones
       const { data: reports } = await supabase
         .from("monthly_reports")
@@ -187,7 +241,10 @@ export default function ReportForm({ isViewMode = false }) {
         // Lógica de avance temporal automático: Si el último fue Enero, el nuevo es Febrero.
         setFormData((prev) => ({
           ...prev,
-          season_name: last.season_name || "2025-2026",
+          season_name:
+            last.season_name && seasonsSnapshot.includes(last.season_name)
+              ? last.season_name
+              : seasonsSnapshot[seasonsSnapshot.length - 1] || last.season_name || "",
           report_month:
             lastMonthIndex === 11 ? months[0] : months[lastMonthIndex + 1],
           report_year:
@@ -200,7 +257,17 @@ export default function ReportForm({ isViewMode = false }) {
           web_url: last.web_url || "",
         }));
       } else {
-        setFormData((prev) => ({ ...prev, season_name: "2025-2026" }));
+        const fromSupervision =
+          typeof localStorage !== "undefined"
+            ? localStorage.getItem("aa_supervision_active_season")
+            : null;
+        let fallback = "";
+        if (fromSupervision && seasonsSnapshot.includes(fromSupervision)) {
+          fallback = fromSupervision;
+        } else if (seasonsSnapshot.length > 0) {
+          fallback = seasonsSnapshot[seasonsSnapshot.length - 1];
+        }
+        setFormData((prev) => ({ ...prev, season_name: fallback }));
       }
     } catch (err) {
       console.error(err);
@@ -352,7 +419,12 @@ export default function ReportForm({ isViewMode = false }) {
       }
 
       // Regla de Milkywire (Basada en el Chocolateo Admin)
-      if (isMilkyMonth && ensureArray(formData.milkywire_material).length === 0 && !formData.milkywire_comment?.trim()) {
+      if (
+        milkywireFeatureEnabled &&
+        isMilkyMonth &&
+        ensureArray(formData.milkywire_material).length === 0 &&
+        !formData.milkywire_comment?.trim()
+      ) {
         throw new Error("⚠️ Estás asignado para Milkywire este mes. Debes registrar el material o dejar una justificación obligatoria.");
       }
 
@@ -525,7 +597,7 @@ export default function ReportForm({ isViewMode = false }) {
                 }
               >
                 <option value="">-- Temporada --</option>
-                {seasons.map((s) => (
+                {availableSeasons.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
@@ -934,18 +1006,22 @@ export default function ReportForm({ isViewMode = false }) {
               isSpecialMonth: isVideoMonth,
               alertText: `⚠️ Entrega obligatoria configurada para el mes de ${formData.report_month}.`
             },
-            {
-              id: "milkywire_material",
-              label: "Material Milkywire",
-              temp: tempMilky,
-              setTemp: setTempMilky,
-              field: "topic",
-              commentField: "milkywire_comment",
-              no: noMilky,
-              setNo: setNoMilky,
-              isSpecialMonth: isMilkyMonth,
-              alertText: `¡Felicidades! Fuiste seleccionado en el chocolateo global para subir video este mes de ${formData.report_month}.`
-            },
+            ...(milkywireFeatureEnabled
+              ? [
+                  {
+                    id: "milkywire_material",
+                    label: "Material Milkywire",
+                    temp: tempMilky,
+                    setTemp: setTempMilky,
+                    field: "topic",
+                    commentField: "milkywire_comment",
+                    no: noMilky,
+                    setNo: setNoMilky,
+                    isSpecialMonth: isMilkyMonth,
+                    alertText: `¡Felicidades! Fuiste seleccionado en el chocolateo global para subir video este mes de ${formData.report_month}.`,
+                  },
+                ]
+              : []),
           ].map((sec) => (
             <div
               key={sec.id}

@@ -14,6 +14,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../app/supabase";
+import {
+  readMilkywireFeatureEnabled,
+  subscribeMilkywireFeatureEnabled,
+} from "../../lib/milkywireFeature";
 import * as XLSX from "xlsx";
 import {
   ArrowLeft,
@@ -58,6 +62,10 @@ export default function History() {
 
   const [activeDropdown, setActiveDropdown] = useState(null);
 
+  const [milkywireFeatureEnabled, setMilkywireFeatureEnabled] = useState(
+    readMilkywireFeatureEnabled,
+  );
+
   const monthMap = {
     enero: 0,
     febrero: 1,
@@ -77,6 +85,8 @@ export default function History() {
   useEffect(() => {
     fetchHistory();
   }, [projectId]);
+
+  useEffect(() => subscribeMilkywireFeatureEnabled(setMilkywireFeatureEnabled), []);
 
   async function fetchHistory() {
     setLoading(true);
@@ -441,17 +451,22 @@ export default function History() {
 
   const exportToExcel = () => {
     if (!filteredReports.length) return;
-    const data = filteredReports.map((r) => ({
-      Temporada: r.season_name,
-      Mes: r.report_month,
-      Año: r.report_year,
-      Fotos: r.photo_count,
-      Posts: r.post_count,
-      Web: `${r.web_progress_percent}%`,
-      Videos: r.videos?.length || 0,
-      Campañas: r.campaigns?.length || 0,
-      Milkywire: r.milkywire_material?.length || 0,
-    }));
+    const data = filteredReports.map((r) => {
+      const row = {
+        Temporada: r.season_name,
+        Mes: r.report_month,
+        Año: r.report_year,
+        Fotos: r.photo_count,
+        Posts: r.post_count,
+        Web: `${r.web_progress_percent}%`,
+        Videos: r.videos?.length || 0,
+        Campañas: r.campaigns?.length || 0,
+      };
+      if (milkywireFeatureEnabled) {
+        row.Milkywire = r.milkywire_material?.length || 0;
+      }
+      return row;
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
@@ -566,6 +581,14 @@ export default function History() {
       ? `<b>${totalMilky} material(es) subidos.</b>`
       : (hasMilkyJustification ? `<span style="color: #ea580c; font-weight: bold;">JUSTIFICADO</span>` : 'Puntos sin material.');
 
+    const milkyTableRowHTML = milkywireFeatureEnabled
+      ? `<tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${milkyInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : (hasMilkyJustification ? "#ea580c" : "#dc2626")};">${totalMilky > 0 ? "OK" : (hasMilkyJustification ? "JUSTIFICADO" : "0%")}</td></tr>`
+      : "";
+
+    const milkyObsParagraph = milkywireFeatureEnabled
+      ? `<p style="margin: 4px 0;">• <b>Milkywire:</b> ${r.milkywire_comment || "Sin observaciones."}</p>`
+      : "";
+
     const historyRows =
       previousReports.length > 0
         ? previousReports
@@ -594,7 +617,7 @@ export default function History() {
           <tr><td style="padding: 10px; border: 1px solid #eee;">Publicaciones RRSS</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${r.post_count} / ${targetPosts}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;"><div style="font-weight: 800; font-size: 14px; color: ${postsColor};">${displayTotalProgressPosts}%</div><div style="font-size: 10px; color: #6b7280;">+${fmt(postStats.gainedNumber)}% este mes</div></td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Sitio Web</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">Estado Actual</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${webStatus.hex};">${r.web_progress_percent}%</td></tr>
           <tr><td style="padding: 10px; border: 1px solid #eee;">Videos de Temporada</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${videoInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalVideos > 0 ? "#065f46" : "#dc2626"};">${totalVideos > 0 ? "OK" : "0%"}</td></tr>
-          <tr><td style="padding: 10px; border: 1px solid #eee;">Material Milkywire</td><td style="padding: 10px; border: 1px solid #eee; text-align: center;">${milkyInfoHTML}</td><td style="padding: 10px; border: 1px solid #eee; text-align: center; font-weight: bold; color: ${totalMilky > 0 ? "#065f46" : (hasMilkyJustification ? "#ea580c" : "#dc2626")};">${totalMilky > 0 ? "OK" : (hasMilkyJustification ? "JUSTIFICADO" : "0%")}</td></tr>
+          ${milkyTableRowHTML}
         </tbody>
       </table>
 
@@ -614,7 +637,7 @@ export default function History() {
           <p style="margin: 4px 0;">• <b>Web:</b> ${r.web_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Campañas:</b> ${r.campaign_comment || "Sin observaciones específicas."}</p>
           <p style="margin: 4px 0;">• <b>Videos ${isVideoMonth ? '(Mes de Entrega)' : ''}:</b> ${r.video_comment || "Sin observaciones relevantes."}</p>
-          <p style="margin: 4px 0;">• <b>Milkywire:</b> ${r.milkywire_comment || "Sin observaciones."}</p>
+          ${milkyObsParagraph}
         </div>
       </div>
       <p style="margin-top: 25px; ${textStyle} font-style: italic;"><b>Nota General:</b> ${r.season_comment || "Quedamos atentos."}</p>
@@ -972,14 +995,16 @@ export default function History() {
                           Camp
                         </span>
                       </div>
-                      <div className="text-center">
-                        <span className="block text-[10px] font-black text-gray-800">
-                          {report.milkywire_material?.length || 0}
-                        </span>
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">
-                          Milky
-                        </span>
-                      </div>
+                      {milkywireFeatureEnabled && (
+                        <div className="text-center">
+                          <span className="block text-[10px] font-black text-gray-800">
+                            {report.milkywire_material?.length || 0}
+                          </span>
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">
+                            Milky
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

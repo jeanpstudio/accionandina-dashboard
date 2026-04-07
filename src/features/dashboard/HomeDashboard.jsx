@@ -17,7 +17,6 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import { Link } from "react-router-dom";
 import {
-  Calendar,
   CheckCircle,
   Clock,
   Video,
@@ -47,7 +46,6 @@ export default function HomeDashboard() {
 
   // Estados de datos
   const [stats, setStats] = useState({ videoProd: 0, globalExecution: 0 });
-  const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [alertPartners, setAlertPartners] = useState([]);
   const [myTasks, setMyTasks] = useState([]);
 
@@ -190,15 +188,7 @@ export default function HomeDashboard() {
     const prevYear = prevDate.getFullYear();
 
     try {
-      // 1. REUNIONES (CAMBIO: Desde inicio de mes)
-      const { data: meetings } = await supabase
-        .from("meetings")
-        .select(`*, partners(name, logo_url)`)
-        .gte("date", filterDateStr) // <--- AHORA TRAE TODO EL MES
-        .order("date", { ascending: true })
-        .limit(10); // Aumenté un poco el límite por si hay muchas
-
-      // 2. PROYECTOS
+      // 1. PROYECTOS
       const { data: projects, error: errProj } = await supabase.from("projects")
         .select(`
             id, partner_id, name, status, start_date, season_duration_months,
@@ -242,12 +232,6 @@ export default function HomeDashboard() {
       const { data: partners } = await supabase
         .from("partners")
         .select("id, name, logo_url");
-
-      // Para auditoría usamos todayStr (futuro)
-      const { data: futureMeets } = await supabase
-        .from("meetings")
-        .select("partner_id, participants_list")
-        .gte("date", todayStr);
 
       const partnersWithIssues = (partners || [])
         .map((p) => {
@@ -406,21 +390,6 @@ export default function HomeDashboard() {
             });
           }
 
-          // E. SIN REUNIONES
-          const hasMeetings = futureMeets?.some(
-            (m) =>
-              m.partner_id === p.id ||
-              m.participants_list?.some((part) => part.id === p.id),
-          );
-          if (hasActiveProjects && !hasMeetings) {
-            issues.push({
-              type: "GHOST",
-              text: "Sin reuniones agendadas",
-              severity: "info",
-              scope: "Socio",
-            });
-          }
-
           let cardStatus = "good";
           if (issues.some((i) => i.severity === "critical"))
             cardStatus = "critical";
@@ -448,7 +417,6 @@ export default function HomeDashboard() {
         .limit(6);
 
       setStats({ videoProd: totalVideos, globalExecution: avgExecution });
-      setUpcomingMeetings(meetings || []);
       setAlertPartners(partnersWithIssues || []);
       setMyTasks(tasks || []);
     } catch (error) {
@@ -508,8 +476,6 @@ export default function HomeDashboard() {
         return <Timer size={16} className="text-orange-500" />;
       case "DELAY":
         return <Video size={16} className="text-orange-500" />;
-      case "GHOST":
-        return <Users size={16} className="text-blue-400" />;
       default:
         return <AlertCircle size={16} />;
     }
@@ -573,64 +539,7 @@ export default function HomeDashboard() {
 
         {/* GRID PRINCIPAL */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-auto lg:h-[500px]">
-          {/* 1. AGENDA */}
-          <div className="bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
-            <div className="flex justify-between items-center mb-6 z-10">
-              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                <Calendar className="text-brand" size={20} /> Agenda Mensual
-              </h2>
-              <Link
-                to="/meetings"
-                className="text-[10px] font-black uppercase text-gray-300 hover:text-brand flex items-center gap-1 transition-colors"
-              >
-                Ver todo <ArrowRight size={12} />
-              </Link>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 relative z-10 pr-2">
-              {upcomingMeetings.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-300">
-                  <Calendar size={32} className="mb-2 opacity-50" />
-                  <p className="text-xs font-bold">Agenda libre este mes</p>
-                </div>
-              ) : (
-                upcomingMeetings.map((meet) => (
-                  <div
-                    key={meet.id}
-                    className="flex gap-4 items-start p-3 hover:bg-gray-50 rounded-2xl transition-colors border border-transparent hover:border-gray-100 cursor-default"
-                  >
-                    <div className="bg-blue-50 text-blue-700 w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0">
-                      <span className="text-sm font-black">
-                        {new Date(meet.date).getUTCDate()}
-                      </span>
-                      <span className="text-[8px] font-black uppercase">
-                        {new Date(meet.date).toLocaleDateString("es-ES", {
-                          weekday: "short",
-                          timeZone: "UTC",
-                        })}
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-gray-800 uppercase leading-tight line-clamp-1">
-                        {meet.title}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
-                          <Clock size={10} /> {meet.time?.slice(0, 5)}
-                        </span>
-                        {meet.partners && (
-                          <span className="text-[9px] font-black text-brand bg-brand/5 px-1.5 py-0.5 rounded uppercase">
-                            {meet.partners.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* 2. TAREAS (SECCIÓN BLINDADA) */}
+          {/* 1. TAREAS (SECCIÓN BLINDADA) */}
           <div className="flex flex-col gap-8">
             <div className="flex-1 bg-gray-900 p-6 md:p-8 rounded-[40px] shadow-lg flex flex-col relative overflow-hidden text-white group">
               <div className="flex justify-between items-center mb-6 z-10">
@@ -707,7 +616,7 @@ export default function HomeDashboard() {
             </div>
           </div>
 
-          {/* 3. AUDITORÍA */}
+          {/* 2. AUDITORÍA */}
           <div className="bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
             <div className="flex justify-between items-center mb-6 z-10">
               <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">

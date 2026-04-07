@@ -171,7 +171,6 @@ export default function Sidebar({ isOpen, onClose }) {
 
           {/* SECCIÓN: HERRAMIENTAS */}
           {(canView("perm_press") ||
-            canView("perm_meetings") ||
             canView("perm_mailing") ||
             canView("perm_videos") ||
             canView("perm_stories")) && (
@@ -188,17 +187,6 @@ export default function Sidebar({ isOpen, onClose }) {
             >
               <Newspaper size={20} />
               <span>Sala de Prensa</span>
-            </Link>
-          )}
-
-          {canView("perm_meetings") && (
-            <Link
-              to="/meetings"
-              className={getLinkClass("/meetings")}
-              onClick={onClose}
-            >
-              <Users size={20} />
-              <span>Reuniones</span>
             </Link>
           )}
 
