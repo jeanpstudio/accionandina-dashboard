@@ -9,7 +9,11 @@
  */
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("⚠️ Atencion: Faltan las variables de entorno de Supabase. La conexion fallara en ejecucion.");
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
