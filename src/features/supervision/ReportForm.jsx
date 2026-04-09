@@ -31,6 +31,8 @@ import {
   Plus,
   MessageSquare,
   ChevronRight,
+  Eye,
+  ExternalLink,
 } from "lucide-react";
 
 /**
@@ -60,6 +62,7 @@ export default function ReportForm({ isViewMode = false }) {
   const [tempCamp, setTempCamp] = useState({ title: "", comment: "" });
   const [tempVideo, setTempVideo] = useState({ topic: "", comment: "" });
   const [tempMilky, setTempMilky] = useState({ topic: "", comment: "" });
+  const [showWebPreview, setShowWebPreview] = useState(false);
 
   // Flags para marcar secciones como "No hubo entrega este mes"
   const [noCamps, setNoCamps] = useState(false);
@@ -96,6 +99,8 @@ export default function ReportForm({ isViewMode = false }) {
     videos: [],    // JSONB: [{topic, comment}, ...]
     milkywire_material: [],
     milkywire_comment: "",
+    video_general_comment: "",
+    milkywire_general_comment: "",
     is_season_start: false,
     is_last_month: false,
     corrections: [], // <--- NUEVO CAMPO: Historial de cambios
@@ -255,6 +260,8 @@ export default function ReportForm({ isViewMode = false }) {
           milkywire_material: ensureArray(last.milkywire_material),
           social_links: ensureArray(last.social_links),
           web_url: last.web_url || "",
+          video_general_comment: last.video_general_comment || "",
+          milkywire_general_comment: last.milkywire_general_comment || "",
         }));
       } else {
         const fromSupervision =
@@ -304,6 +311,8 @@ export default function ReportForm({ isViewMode = false }) {
           videos: ensureArray(report.videos),
           milkywire_material: ensureArray(report.milkywire_material),
           corrections: ensureArray(report.corrections),
+          video_general_comment: report.video_general_comment || "",
+          milkywire_general_comment: report.milkywire_general_comment || "",
         });
 
         // Marcamos flags de "Sin Entrega" si hay comentario pero no hay items en los arrays
@@ -343,19 +352,17 @@ export default function ReportForm({ isViewMode = false }) {
   /**
    * addItem: Añade un nuevo item (Video/Campaña/Milkywire) a su respectiva lista JSONB.
    */
-  const addItem = (type, tempData, setTemp, field) => {
-    if (tempData[field]?.trim()) {
-      let newItem = { ...tempData };
-      setFormData((prev) => ({
-        ...prev,
-        [type]: [...ensureArray(prev[type]), newItem],
-      }));
-
-      // Limpieza del buffer temporal según el tipo de dato
-      if (type === "videos") setTemp({ topic: "", comment: "" });
-      else if (type === "milkywire_material") setTemp({ topic: "", comment: "" });
-      else setTemp({ title: "", comment: "" });
-    }
+  const addItem = (type, tempValue, setTempFn, mainField) => {
+    if (!tempValue[mainField]?.trim()) return;
+    const newItem = { 
+      ...tempValue, 
+      date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) 
+    };
+    setFormData((prev) => ({
+      ...prev,
+      [type]: [...ensureArray(prev[type]), newItem],
+    }));
+    setTempFn({ [mainField]: "", comment: "" });
   };
 
   /**
@@ -374,7 +381,11 @@ export default function ReportForm({ isViewMode = false }) {
     } else {
       setFormData(prev => ({
         ...prev,
-        campaigns: [...currentCamps, { title: campTitle, comment: "" }]
+        campaigns: [...currentCamps, { 
+          title: campTitle, 
+          comment: "", 
+          date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) 
+        }]
       }));
     }
   };
@@ -464,6 +475,8 @@ export default function ReportForm({ isViewMode = false }) {
             { id: "web_comment", label: "Comentario Web" },
             { id: "video_comment", label: "Comentario Videos" },
             { id: "campaign_comment", label: "Comentario Campañas" },
+            { id: "video_general_comment", label: "Comentario General Videos" },
+            { id: "milkywire_general_comment", label: "Comentario General Milkywire" },
             { id: "season_comment", label: "Observación General" }
           ];
 
@@ -578,8 +591,37 @@ export default function ReportForm({ isViewMode = false }) {
 
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start"
+        className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start"
       >
+        {/* COLUMNA ANCHO COMPLETO: NOTA FINAL */}
+        <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-[32px] border-2 border-brand/5 shadow-sm space-y-6 bg-gradient-to-br from-white to-gray-50/30">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-brand/10 rounded-2xl text-brand">
+              <MessageSquare size={22} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
+                Nota General
+              </h3>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                Conclusión del reporte
+              </p>
+            </div>
+          </div>
+          <textarea
+            value={formData.season_comment}
+            disabled={isViewMode}
+            onChange={(e) =>
+              setFormData((prev) => ({
+                ...prev,
+                season_comment: e.target.value,
+              }))
+            }
+            placeholder="Escribe la conclusión final aquí..."
+            className="w-full bg-gray-50/50 border-none rounded-[24px] p-4 md:p-8 font-medium text-gray-700 min-h-[200px] outline-none italic text-sm leading-relaxed shadow-inner"
+          />
+        </div>
+
         {/* COLUMNA 1 */}
         <div className="space-y-8">
           <div className="bg-white p-6 md:p-8 rounded-[32px] border border-gray-100 shadow-sm space-y-6">
@@ -742,7 +784,7 @@ export default function ReportForm({ isViewMode = false }) {
                     </div>
                   ))}
               </div>
-              <div className="space-y-6 pt-4 border-t border-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-50">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">
                     Fotos Recibidas
@@ -830,15 +872,37 @@ export default function ReportForm({ isViewMode = false }) {
                 }))
               }
             />
-            <textarea
-              placeholder="Detalles del avance..."
-              className="w-full bg-brand/5 rounded-2xl p-5 text-sm italic min-h-[100px] outline-none shadow-inner"
-              value={formData.web_comment}
+            <input
+              type="url"
+              placeholder="https://tu-web.com"
+              className="w-full bg-gray-50 border-none rounded-xl p-4 text-sm font-bold shadow-inner"
+              value={formData.web_url || ""}
               disabled={isViewMode}
               onChange={(e) =>
-                setFormData((p) => ({ ...p, web_comment: e.target.value }))
+                setFormData((p) => ({ ...p, web_url: e.target.value }))
               }
             />
+            <div className="flex gap-4">
+              <textarea
+                placeholder="Detalles del avance..."
+                className="flex-1 bg-brand/5 rounded-2xl p-5 text-sm italic min-h-[100px] outline-none shadow-inner"
+                value={formData.web_comment}
+                disabled={isViewMode}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, web_comment: e.target.value }))
+                }
+              />
+              {formData.web_url?.startsWith('http') && (
+                <button
+                  type="button"
+                  onClick={() => setShowWebPreview(true)}
+                  className="bg-brand text-white p-6 rounded-2xl flex flex-col items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-md group"
+                >
+                  <Eye size={20} className="group-hover:animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Ver</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -861,118 +925,108 @@ export default function ReportForm({ isViewMode = false }) {
               </label>
             </div>
 
-            {/* SECCIÓN A: Campañas Globales (Configuradas por Admin) */}
-            {(globalCampaigns.length > 0 || partnerCampaigns.length > 0) && (
-              <div className="space-y-3 bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-100 mb-4">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 italic">
-                  Selecciona de la lista de campañas activas:
+            {/* SECCIÓN A: Campañas Globales y del Socio (Selector) */}
+            <div className="space-y-3 bg-gray-50 p-6 rounded-2xl shadow-inner border border-gray-100 mb-4">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">
+                Seleccionar Campaña de Temporada:
+              </label>
+              <div className="flex gap-2">
+                <select
+                  className="flex-1 bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm outline-brand"
+                  disabled={isViewMode}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleToggleCampaign(e.target.value);
+                      e.target.value = ""; // Reset after selection
+                    }
+                  }}
+                >
+                  <option value="">-- Elige una campaña activa --</option>
+                  <optgroup label="AA Global">
+                    {globalCampaigns.map(c => (
+                      <option key={c.id} value={c.title} disabled={ensureArray(formData.campaigns).some(ca => ca.title === c.title)}>
+                        {c.title} {ensureArray(formData.campaigns).some(ca => ca.title === c.title) ? "(Ya agregada)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Específicas Socio">
+                    {partnerCampaigns.map(c => (
+                      <option key={c.id} value={c.title} disabled={ensureArray(formData.campaigns).some(ca => ca.title === c.title)}>
+                        {c.title} {ensureArray(formData.campaigns).some(ca => ca.title === c.title) ? "(Ya agregada)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* SECCIÓN B: Carga Manual */}
+              <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 pl-1">
+                  ¿Otra campaña o evento? (Carga Manual)
                 </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nombre de la campaña..."
+                    className="flex-1 bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
+                    value={tempCamp.title}
+                    disabled={isViewMode}
+                    onChange={(e) => setTempCamp(p => ({ ...p, title: e.target.value }))}
+                  />
+                  {!isViewMode && (
+                    <button
+                      type="button"
+                      onClick={() => addItem("campaigns", tempCamp, setTempCamp, "title")}
+                      className="px-6 bg-brand text-white text-[18px] font-black rounded-xl"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
-                {/* 1. Campañas Globales de Temporada */}
-                {globalCampaigns.map(camp => {
-                  const isChecked = ensureArray(formData.campaigns).some(c => c.title === camp.title);
-                  const currentCampData = ensureArray(formData.campaigns).find(c => c.title === camp.title);
-
-                  return (
-                    <div key={camp.id} className={`p-4 rounded-xl border-2 transition-all ${isChecked ? "bg-white border-brand shadow-sm" : "bg-white/50 border-gray-100 hover:border-gray-300"}`}>
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="w-5 h-5 accent-brand"
-                          checked={isChecked}
-                          disabled={isViewMode}
-                          onChange={() => handleToggleCampaign(camp.title)}
-                        />
+            {/* LISTA DE CAMPAÑAS REGISTRADAS (HISTORIAL) */}
+            {ensureArray(formData.campaigns).length > 0 && (
+              <div className="space-y-3 mb-6">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Campañas Registradas este mes:</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {ensureArray(formData.campaigns).map((camp, idx) => (
+                    <div key={idx} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2">
+                      <div className="flex justify-between items-center p-3 bg-gray-50/50 border-b border-gray-100">
                         <div className="flex flex-col">
-                          <span className={`text-sm font-black uppercase ${isChecked ? "text-brand" : "text-gray-600"}`}>{camp.title}</span>
-                          <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Global AA</span>
+                          <span className="text-[10px] font-black text-brand uppercase truncate max-w-[150px]">
+                            {camp.title}
+                          </span>
+                          <span className="text-[8px] font-bold text-gray-400">
+                            {camp.date || "Sin fecha"}
+                          </span>
                         </div>
-                      </label>
-
-                      {isChecked && (
+                        {!isViewMode && (
+                          <X
+                            size={14}
+                            className="cursor-pointer text-gray-300 hover:text-red-500 transition-colors"
+                            onClick={() => {
+                              const updated = ensureArray(formData.campaigns).filter((_, i) => i !== idx);
+                              setFormData(p => ({ ...p, campaigns: updated }));
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="p-3">
                         <textarea
-                          placeholder="Link de post o breve descripción de participación..."
-                          className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
-                          rows="2"
-                          value={currentCampData?.comment || ""}
+                          placeholder="Link de post o detalle de participación..."
+                          className="w-full bg-gray-50 border-none rounded-lg p-2 text-[11px] italic font-medium outline-none text-gray-600 min-h-[60px] resize-none"
+                          value={camp.comment || ""}
                           disabled={isViewMode}
-                          onChange={(e) => updateCampaignComment(camp.title, e.target.value)}
+                          onChange={(e) => updateGenericField("campaigns", idx, "comment", e.target.value)}
                         />
-                      )}
+                      </div>
                     </div>
-                  );
-                })}
-
-                {/* 2. Campañas Específicas del Socio */}
-                {partnerCampaigns.map(camp => {
-                  const isChecked = ensureArray(formData.campaigns).some(c => c.title === camp.title);
-                  const currentCampData = ensureArray(formData.campaigns).find(c => c.title === camp.title);
-
-                  return (
-                    <div key={camp.id} className={`p-4 rounded-xl border-2 transition-all ${isChecked ? "bg-white border-blue-500 shadow-sm" : "bg-white/50 border-gray-100 hover:border-gray-300"}`}>
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="w-5 h-5 accent-blue-500"
-                          checked={isChecked}
-                          disabled={isViewMode}
-                          onChange={() => handleToggleCampaign(camp.title)}
-                        />
-                        <div className="flex flex-col">
-                          <span className={`text-sm font-black uppercase ${isChecked ? "text-blue-600" : "text-gray-600"}`}>{camp.title}</span>
-                          <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Específica Socio</span>
-                        </div>
-                      </label>
-
-                      {isChecked && (
-                        <textarea
-                          placeholder="Detalle de ejecución o resultados..."
-                          className="w-full mt-3 bg-gray-50 border-none rounded-xl p-3 text-xs italic font-medium outline-none text-gray-700"
-                          rows="2"
-                          value={currentCampData?.comment || ""}
-                          disabled={isViewMode}
-                          onChange={(e) => updateCampaignComment(camp.title, e.target.value)}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             )}
-
-            {/* SECCIÓN B: Carga Manual (Para campañas no listadas o históricas) */}
-            <div className="bg-brand/5 p-6 rounded-2xl border border-brand/10 space-y-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand/60 pl-1">
-                ¿Otra campaña o evento? (Carga Manual)
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Nombre de la campaña..."
-                  className="flex-1 bg-white border-none rounded-xl p-4 text-sm font-bold shadow-sm"
-                  value={tempCamp.title}
-                  disabled={isViewMode}
-                  onChange={(e) => setTempCamp(p => ({ ...p, title: e.target.value }))}
-                />
-              </div>
-              <textarea
-                placeholder="Detalle de participación o links..."
-                className="w-full bg-white border-none rounded-xl p-4 text-xs italic font-medium outline-none text-gray-700 shadow-sm"
-                rows="2"
-                value={tempCamp.comment}
-                disabled={isViewMode}
-                onChange={(e) => setTempCamp(p => ({ ...p, comment: e.target.value }))}
-              />
-              {!isViewMode && (
-                <button
-                  type="button"
-                  onClick={() => addItem("campaigns", tempCamp, setTempCamp, "title")}
-                  className="w-full py-3 bg-brand/10 text-brand text-[10px] font-black rounded-xl uppercase tracking-[0.1em] hover:bg-brand hover:text-white transition-all border border-brand/20"
-                >
-                  + Agregar Campaña Manual
-                </button>
-              )}
-            </div>
 
             {/* SECCIÓN C: Comentario General de Campañas (Siempre habilitado) */}
             <div className="space-y-2 pt-4">
@@ -1004,6 +1058,7 @@ export default function ReportForm({ isViewMode = false }) {
               no: noVideos,
               setNo: setNoVideos,
               isSpecialMonth: isVideoMonth,
+              generalCommentField: "video_general_comment",
               alertText: `⚠️ Entrega obligatoria configurada para el mes de ${formData.report_month}.`
             },
             ...(milkywireFeatureEnabled
@@ -1018,6 +1073,7 @@ export default function ReportForm({ isViewMode = false }) {
                     no: noMilky,
                     setNo: setNoMilky,
                     isSpecialMonth: isMilkyMonth,
+                    generalCommentField: "milkywire_general_comment",
                     alertText: `¡Felicidades! Fuiste seleccionado en el chocolateo global para subir video este mes de ${formData.report_month}.`,
                   },
                 ]
@@ -1089,12 +1145,18 @@ export default function ReportForm({ isViewMode = false }) {
                     {ensureArray(formData[sec.id]).length > 0 && (
                       <div className="space-y-3 mt-6">
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Entregas Registradas:</p>
-                        {ensureArray(formData[sec.id]).map((item, idx) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {ensureArray(formData[sec.id]).map((item, idx) => (
                           <div key={idx} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2">
-                            <div className="flex justify-between items-center p-3 bg-gray-50/50">
-                              <span className="text-[10px] font-black text-brand uppercase truncate max-w-[80%]">
-                                {item[sec.field]}
-                              </span>
+                            <div className="flex justify-between items-center p-3 bg-gray-50/50 border-b border-gray-100">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-brand uppercase truncate max-w-[150px]">
+                                  {item[sec.field]}
+                                </span>
+                                <span className="text-[8px] font-bold text-gray-400">
+                                  {item.date || "Sin fecha"}
+                                </span>
+                              </div>
                               {!isViewMode && (
                                 <X
                                   size={14}
@@ -1117,6 +1179,7 @@ export default function ReportForm({ isViewMode = false }) {
                             </div>
                           </div>
                         ))}
+                        </div>
                       </div>
                     )}
                   </>
@@ -1141,39 +1204,91 @@ export default function ReportForm({ isViewMode = false }) {
                   </div>
                 )}
               </div>
+
+              {/* NUEVO: Comentario General (Se desactiva si hay entregas o justificación) */}
+              <div className="space-y-2 pt-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">
+                  Conclusión / Comentario General {sec.id === "videos" ? "de Videos" : "de Milkywire"}
+                </label>
+                <textarea
+                  placeholder={
+                    sec.no || ensureArray(formData[sec.id]).some(item => (item.comment || "").trim().length > 0)
+                      ? "Usa el detalle de la entrega o justificación arriba..."
+                      : "Resumen o estado general (ej: Todo en orden este mes)..."
+                  }
+                  className={`w-full bg-gray-50 rounded-2xl p-4 text-sm italic min-h-[100px] outline-none shadow-inner border transition-all ${
+                    sec.no || ensureArray(formData[sec.id]).some(item => (item.comment || "").trim().length > 0)
+                      ? "opacity-50 border-gray-100 bg-gray-100 cursor-not-allowed"
+                      : "border-gray-100 hover:border-brand/20 focus:border-brand/30 border-dashed"
+                  }`}
+                  value={formData[sec.generalCommentField] || ""}
+                  disabled={isViewMode || sec.no || ensureArray(formData[sec.id]).some(item => (item.comment || "").trim().length > 0)}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      [sec.generalCommentField]: e.target.value,
+                    }))
+                  }
+                />
+              </div>
             </div>
           ))}
         </div>
+      </form>
 
-        {/* COLUMNA 3: NOTA FINAL */}
-        <div className="bg-white p-6 md:p-8 rounded-[32px] border-2 border-brand/5 shadow-sm space-y-6 bg-gradient-to-br from-white to-gray-50/30">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-brand/10 rounded-2xl text-brand">
-              <MessageSquare size={22} />
+      {/* MODAL DE PREVISUALIZACIÓN WEB */}
+      {showWebPreview && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 animate-in fade-in">
+          <div 
+            className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" 
+            onClick={() => setShowWebPreview(false)}
+          />
+          <div className="relative bg-white w-full max-w-6xl h-full rounded-[40px] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-white">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-brand/10 rounded-xl text-brand">
+                  <Globe size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 uppercase tracking-tighter">Previsualización en Vivo</h3>
+                  <p className="text-[10px] font-medium text-gray-400 truncate max-w-[200px] md:max-w-md">{formData.web_url}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a 
+                  href={formData.web_url} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="p-3 bg-gray-50 text-gray-400 hover:text-brand rounded-xl transition-colors"
+                  title="Abrir en pestaña nueva"
+                >
+                  <ExternalLink size={18} />
+                </a>
+                <button 
+                  onClick={() => setShowWebPreview(false)}
+                  className="p-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-black text-gray-900 uppercase tracking-tighter">
-                Nota General
-              </h3>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                Conclusión del reporte
-              </p>
+            <div className="flex-1 bg-gray-50 relative">
+              <iframe 
+                src={formData.web_url} 
+                className="w-full h-full border-none"
+                title="Web Preview"
+                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              />
+              {/* Overlay informativo si el iframe falla o se bloquea */}
+              <div className="absolute inset-x-0 bottom-0 p-8 bg-gradient-to-t from-gray-900/80 to-transparent text-white pointer-events-none">
+                <p className="text-xs font-bold opacity-80 italic">
+                  Nota: Algunas webs (ej. Google, FB) bloquean la previsualización por seguridad. Si ves el cuadro blanco, usa el botón de "Abrir en pestaña externa".
+                </p>
+              </div>
             </div>
           </div>
-          <textarea
-            value={formData.season_comment}
-            disabled={isViewMode}
-            onChange={(e) =>
-              setFormData((prev) => ({
-                ...prev,
-                season_comment: e.target.value,
-              }))
-            }
-            placeholder="Escribe la conclusión final aquí..."
-            className="w-full bg-gray-50/50 border-none rounded-[24px] p-4 md:p-8 font-medium text-gray-700 min-h-[460px] outline-none italic text-sm leading-relaxed shadow-inner"
-          />
         </div>
-      </form>
+      )}
     </div>
   );
 }

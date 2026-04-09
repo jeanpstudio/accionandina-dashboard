@@ -36,12 +36,19 @@ import {
   MessageSquare,
   Globe,
   MessageCircle,
+  CheckCircle2,
   Copy,
   ChevronDown,
   Hash,
   Lock, // <--- IMPORTANTE: Icono de seguridad
   Eye, // <--- ICONO DE VISTA
 } from "lucide-react";
+
+/**
+ * ensureArray: Pequeña utilidad para garantizar que un campo JSONB que 
+ * esperamos que sea un array no sea nulo o indefinido al iterar sobre él.
+ */
+const ensureArray = (arr) => (Array.isArray(arr) ? arr : []);
 
 export default function History() {
   const { projectId } = useParams();
@@ -569,8 +576,8 @@ export default function History() {
       "font-family: Arial, sans-serif; font-size: 13px; color: #374151; line-height: 1.5;";
     const getStatusColor = (isComplete) => (isComplete ? "#065f46" : "#dc2626");
 
-    const campaignItemsHTML = Array.isArray(r.campaigns) && r.campaigns.length > 0
-      ? r.campaigns.map(c => `<li><b>${c.title}:</b> ${c.comment || 'Participación registrada.'}</li>`).join('')
+    const campaignItemsHTML = ensureArray(r.campaigns).length > 0
+      ? ensureArray(r.campaigns).map(c => `<li><b>${c.title}:</b> ${c.comment || 'Participación registrada.'}</li>`).join('')
       : '<li>No se reportaron campañas activas este mes.</li>';
 
     const videoInfoHTML = totalVideos > 0
@@ -630,14 +637,26 @@ export default function History() {
       <p style="font-size: 11px; font-weight: bold; color: #4b5563; text-transform: uppercase; margin-bottom: 8px;">Historial de meses anteriores:</p>
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-family: Arial, sans-serif; font-size: 11px; border: 1px solid #eee; background-color: #f9fafb;"><thead><tr style="background-color: #e5e7eb; color: #374151; text-align: left;"><th style="padding: 8px; border-right: 1px solid #d1d5db;">MES</th><th style="padding: 8px; border-right: 1px solid #d1d5db; text-align: center;">FOTOS</th><th style="padding: 8px; text-align: center;">POSTS</th></tr></thead><tbody>${historyRows}</tbody></table>
       <div style="background-color: #f9fafb; padding: 20px; border-radius: 12px; border: 1px solid #eee;">
-        <p style="font-size: 11px; color: #065f46; font-weight: 800; text-transform: uppercase; margin: 0 0 10px 0;">Observaciones:</p>
         <div style="${textStyle}">
           <p style="margin: 4px 0;">• <b>Fotos:</b> ${r.photo_comment || "Sin observaciones."}</p>
           <p style="margin: 4px 0;">• <b>Publicaciones:</b> ${r.post_comment || "Sin observaciones."}</p>
-          <p style="margin: 4px 0;">• <b>Web:</b> ${r.web_comment || "Sin observaciones."}</p>
-          <p style="margin: 4px 0;">• <b>Campañas:</b> ${r.campaign_comment || "Sin observaciones específicas."}</p>
-          <p style="margin: 4px 0;">• <b>Videos ${isVideoMonth ? '(Mes de Entrega)' : ''}:</b> ${r.video_comment || "Sin observaciones relevantes."}</p>
-          ${milkyObsParagraph}
+          <p style="margin: 4px 0;">• <b>Web:</b> ${r.web_comment || "Sin observaciones."} ${r.web_url ? `(${r.web_url})` : ""}</p>
+          <p style="margin: 4px 0;">• <b>Campañas:</b> ${
+            ensureArray(r.campaigns).map(c => c.comment).filter(Boolean).length > 0
+              ? ensureArray(r.campaigns).map(c => c.comment).filter(Boolean).join('; ')
+              : (r.campaign_comment || "Sin observaciones específicas.")
+          }</p>
+          <p style="margin: 4px 0;">• <b>Videos ${isVideoMonth ? '(Mes de Entrega)' : ''}:</b> ${
+            ensureArray(r.videos).map(v => v.comment).filter(Boolean).length > 0 
+              ? ensureArray(r.videos).map(v => v.comment).filter(Boolean).join('; ')
+              : (r.video_comment || r.video_general_comment || "Sin observaciones relevantes.")
+          }</p>
+          ${milkywireFeatureEnabled ? `
+          <p style="margin: 4px 0;">• <b>Milkywire:</b> ${
+            ensureArray(r.milkywire_material).map(m => m.comment).filter(Boolean).length > 0 
+              ? ensureArray(r.milkywire_material).map(m => m.comment).filter(Boolean).join('; ')
+              : (r.milkywire_comment || r.milkywire_general_comment || "Sin observaciones.")
+          }</p>` : ""}
         </div>
       </div>
       <p style="margin-top: 25px; ${textStyle} font-style: italic;"><b>Nota General:</b> ${r.season_comment || "Quedamos atentos."}</p>
@@ -891,6 +910,14 @@ export default function History() {
                     <Star size={12} className="fill-white" />
                     <span className="text-[10px] font-black uppercase tracking-tighter">
                       Mes Inicial
+                    </span>
+                  </div>
+                )}
+                {report.is_last_month && (
+                  <div className="absolute -top-3 right-20 bg-gray-900 text-white px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg z-10 border-2 border-white">
+                    <CheckCircle2 size={12} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">
+                      Temporada Finalizada
                     </span>
                   </div>
                 )}
