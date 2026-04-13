@@ -148,17 +148,20 @@ export default function PlanningTab({
       : taskStart;
 
     /**
-     * Regla clave:
-     * Si la tarea pertenece al mes que se está viendo (month_key),
-     * siempre debe ser visible en su semana planificada, aunque su rango
-     * de ejecución (start/end) haya quedado en otro mes por una ejecución extendida.
-     *
-     * Esto evita inconsistencias donde en el resumen aparece la tarea del mes,
-     * pero en columnas semanales "desaparece" por tener fechas fuera de mes.
+     * REGLA DE ORO PARA PLANIFICACIÓN: 
+     * Si la tarea pertenece al mes que estamos viendo (month_key), siempre debe ser 
+     * visible en su semana proyectada (target_week), independientemente de sus fechas 
+     * de ejecución real. Esto garantiza que la "intención" original no desaparezca.
      */
-    if (task.month_key === viewingMonthKey) {
-      return parseInt(task.target_week) === weekNum;
+    if (task.month_key === viewingMonthKey && parseInt(task.target_week) === weekNum) {
+      return true;
     }
+
+    /**
+     * ERROR ANTERIOR: Aquí había un 'return' que bloqueaba la evaluación del rango 
+     * si la tarea era del mes actual. Al quitarlo (o condicionarlo), permitimos que 
+     * una tarea del mes actual se vea en MÚLTIPLES semanas si su rango lo indica.
+     */
 
     // Prorrogar visibilidad si está pendiente y terminó antes del mes actual (Overdue)
     if (task.status !== "COMPLETADO" && taskEnd < currentMonthDate) {
