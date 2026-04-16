@@ -184,7 +184,8 @@ export default function GlobalReport() {
     );
 
     // --- CORRECCIÓN LÓGICA: META ESPERADA ---
-    const projStart = proj.start_date ? new Date(proj.start_date) : null;
+    const d = proj.start_date ? new Date(proj.start_date) : null;
+    const projStart = d ? new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) : null;
     const duration = proj.season_duration_months || 12;
     let expectedPercent = 0;
     let monthsPassed = 0;
@@ -205,7 +206,8 @@ export default function GlobalReport() {
       // Calculamos meses pasados hasta la FECHA DE CORTE, no hasta HOY
       monthsPassed =
         (calculationDate.getFullYear() - projStart.getFullYear()) * 12 +
-        (calculationDate.getMonth() - projStart.getMonth());
+        (calculationDate.getMonth() - projStart.getMonth()) +
+        1;
 
       // Si el proyecto empezó después de la fecha de corte (caso raro), es 0
       if (monthsPassed < 0) monthsPassed = 0;

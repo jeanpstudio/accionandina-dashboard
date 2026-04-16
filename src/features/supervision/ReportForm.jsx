@@ -77,6 +77,9 @@ export default function ReportForm({ isViewMode = false }) {
   const [milkywireFeatureEnabled, setMilkywireFeatureEnabled] = useState(
     readMilkywireFeatureEnabled,
   );
+  // Reglas dinámicas de video y campañas (del proyecto o de la temporada)
+  const [effectiveVideoMonths, setEffectiveVideoMonths] = useState(["Junio", "Octubre", "Marzo"]);
+  const [effectiveCampaignRules, setEffectiveCampaignRules] = useState([]);
 
   // --- MODELO DE DATOS PRINCIPAL (Sincronizado con Supabase 'monthly_reports') ---
   const [formData, setFormData] = useState({
@@ -107,13 +110,39 @@ export default function ReportForm({ isViewMode = false }) {
   });
 
   // Meses donde el equipo de comunicación exige videos de corte.
-  const videoMonths = ["Junio", "Octubre", "Marzo"];
-  const isVideoMonth = videoMonths.includes(formData?.report_month);
+  // Dinámico: usa effectiveVideoMonths que se carga desde la temporada o el override del proyecto
+  const isVideoMonth = effectiveVideoMonths.includes(formData?.report_month);
+
+  // Calcula el estado de alerta de una campaña en el mes actual del reporte
+  const getCampaignAlert = (campaign) => {
+    if (!formData.report_month) return null;
+    const mIdx = months.indexOf(formData.report_month);
+    const startIdx = months.indexOf(campaign.start_month);
+    const endIdx = months.indexOf(campaign.end_month || campaign.start_month);
+    if (mIdx < startIdx) return null; // Aún no empieza
+    if (mIdx === endIdx) return "red"; // Último mes — alerta roja
+    if (mIdx > endIdx) return "red"; // Ya pasó el plazo
+    if (mIdx >= startIdx && mIdx < endIdx) return "yellow"; // En rango
+    return null;
+  };
 
   const months = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
   ];
+
+  const getMonthNumber = (reportMonth, reportYear) => {
+    if (!project?.start_date) return 0;
+    const start = new Date(project.start_date);
+    // Usamos UTC para evitar problemas de zona horaria con fechas de DB
+    const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    
+    const mIdx = months.indexOf(reportMonth);
+    const endUTC = new Date(Date.UTC(reportYear, mIdx, 1));
+    
+    const diff = (endUTC.getUTCFullYear() - startUTC.getUTCFullYear()) * 12 + (endUTC.getUTCMonth() - startUTC.getUTCMonth()) + 1;
+    return diff;
+  };
 
   // Sanitización de datos: Asegura que campos JSONB sean siempre arrays para evitar errores de .map()
   const ensureArray = (data) => {
@@ -181,27 +210,55 @@ export default function ReportForm({ isViewMode = false }) {
 
   /**
    * loadGlobalSettings: Cruza los datos del reporte actual con las configuraciones del Admin.
+   * Ahora también carga las reglas de video y campañas (del proyecto o de la temporada).
    */
   async function loadGlobalSettings(season, partnerId, currentMonth) {
     try {
-      // 1. Cargamos las campañas que el admin habilitó para esta temporada específica.
-      const { data: camps } = await supabase.from("season_campaigns").select("*").eq("season_name", season);
+      // 1. Campañas de la temporada (con rangos de meses)
+      const { data: camps } = await supabase
+        .from("season_campaigns")
+        .select("*")
+        .eq("season_name", season.trim());
       setGlobalCampaigns(camps || []);
 
-      // 2. Cargamos las campañas específicas del socio (del Dashboard de Campañas)
-      // Buscamos campañas donde esté incluido este partner.
+      // 2. Campañas específicas del socio (Dashboard de Campañas)
       const { data: partCamps } = await supabase
         .from("campaigns")
         .select("*")
         .contains("partner_ids", [partnerId]);
-
       setPartnerCampaigns(partCamps || []);
 
-      // 3. Verificamos el 'Chocolateo': ¿Está este socio agendado para Milkywire en este mes?
+      // 3. Reglas efectivas de video y campañas:
+      // Si el proyecto tiene override manual, usamos esos datos.
+      // Si no, consultamos las reglas globales de la temporada.
+      const proj = project; // ya está en estado
+      if (proj?.override_season_rules) {
+        setEffectiveVideoMonths(Array.isArray(proj.custom_video_months) ? proj.custom_video_months : []);
+        setEffectiveCampaignRules(Array.isArray(proj.custom_campaign_requirements) ? proj.custom_campaign_requirements : []);
+      } else {
+        // Cargar video_months desde season_registry
+        const { data: reg } = await supabase
+          .from("season_registry")
+          .select("video_months")
+          .eq("season_name", season.trim())
+          .maybeSingle();
+        setEffectiveVideoMonths(
+          reg?.video_months && Array.isArray(reg.video_months)
+            ? reg.video_months
+            : ["Junio", "Octubre", "Marzo"]
+        );
+        // Las campañas globales de temporada con su rango son las reglas
+        setEffectiveCampaignRules(
+          (camps || []).filter(c => c.start_month && c.end_month)
+        );
+      }
+
+      // 4. Milkywire: ¿Le toca a este socio este mes?
       if (!milkywireFeatureEnabled) {
         setIsMilkyMonth(false);
       } else if (currentMonth) {
-        const { data: milky } = await supabase.from("milkywire_schedules")
+        const { data: milky } = await supabase
+          .from("milkywire_schedules")
           .select("*")
           .eq("season_name", season)
           .eq("target_month", currentMonth)
@@ -224,18 +281,35 @@ export default function ReportForm({ isViewMode = false }) {
     try {
       const { data: projData } = await supabase
         .from("projects")
-        .select("*, partners(name)")
+        .select("*, partners(name, id)")
         .eq("id", projectId)
         .single();
       setProject(projData);
 
       const seasonsSnapshot = await loadAvailableSeasons();
 
-      // Obtenemos el último reporte para heredar configuraciones
+      // Cargamos las reglas de temporada tan pronto como tenemos el proyecto
+      // (no esperamos al useEffect que depende de project?.partners?.id)
+      const storedSeason =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("aa_supervision_active_season")
+          : null;
+      const targetSeason =
+        storedSeason && seasonsSnapshot.includes(storedSeason)
+          ? storedSeason
+          : seasonsSnapshot[seasonsSnapshot.length - 1] || "";
+
+      if (targetSeason && projData?.partners?.id) {
+        await loadGlobalSettings(targetSeason, projData.partners.id, "");
+      }
+
+      // Obtenemos el último reporte de la MISMA temporada activa para heredar configuraciones
+      // (Si es una temporada nueva, el último reporte de otra temporada no debe heredarse)
       const { data: reports } = await supabase
         .from("monthly_reports")
         .select("*")
         .eq("project_id", projectId)
+        .eq("season_name", targetSeason) // <-- FILTRAR POR TEMPORADA ACTIVA
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -243,25 +317,23 @@ export default function ReportForm({ isViewMode = false }) {
         const last = reports[0];
         const lastMonthIndex = months.indexOf(last.report_month);
 
-        // Lógica de avance temporal automático: Si el último fue Enero, el nuevo es Febrero.
+        // Herencia de datos de la misma temporada: siguiente mes cronológico
         setFormData((prev) => ({
           ...prev,
-          season_name:
-            last.season_name && seasonsSnapshot.includes(last.season_name)
-              ? last.season_name
-              : seasonsSnapshot[seasonsSnapshot.length - 1] || last.season_name || "",
+          season_name: targetSeason,
           report_month:
             lastMonthIndex === 11 ? months[0] : months[lastMonthIndex + 1],
           report_year:
             lastMonthIndex === 11 ? last.report_year + 1 : last.report_year,
           web_progress_percent: last.web_progress_percent || 0,
-          campaigns: ensureArray(last.campaigns),
-          videos: ensureArray(last.videos),
-          milkywire_material: ensureArray(last.milkywire_material),
+          // Solo heredamos URL y porcentaje web — los entregables son por mes
+          campaigns: [], // nuevo mes = lista vacía
+          videos: [],
+          milkywire_material: [],
           social_links: ensureArray(last.social_links),
           web_url: last.web_url || "",
-          video_general_comment: last.video_general_comment || "",
-          milkywire_general_comment: last.milkywire_general_comment || "",
+          video_general_comment: "",
+          milkywire_general_comment: "",
         }));
       } else {
         const fromSupervision =
@@ -291,7 +363,7 @@ export default function ReportForm({ isViewMode = false }) {
     try {
       const { data: projData } = await supabase
         .from("projects")
-        .select("*, partners(name)")
+        .select("*, partners(name, id)")
         .eq("id", projectId)
         .single();
       setProject(projData);
@@ -328,6 +400,11 @@ export default function ReportForm({ isViewMode = false }) {
           ensureArray(report.milkywire_material).length === 0
         )
           setNoMilky(true);
+
+        // Cargar reglas de temporada/campañas usando los datos recién obtenidos del proyecto
+        if (report.season_name && projData?.partners?.id) {
+          await loadGlobalSettings(report.season_name, projData.partners.id, report.report_month);
+        }
       }
     } catch (err) {
       alert("Error: " + err.message);
@@ -421,8 +498,14 @@ export default function ReportForm({ isViewMode = false }) {
 
     try {
       // 1. VALIDACIONES DE NEGOCIO (REGLAS DE COMUNICACIÓN)
-      // Si el equipo comunicó que es mes de video o Milkywire, el socio NO puede dejar el reporte vacío
-      // sin al menos explicar por qué no se cumplió la entrega.
+      
+      // Validación de Límite de Meses (Nuevo)
+      const currentMonthNumber = getMonthNumber(formData.report_month, formData.report_year);
+      const maxMonths = project?.season_duration_months || 12;
+      
+      if (currentMonthNumber > maxMonths) {
+        throw new Error(`⚠️ Límite Excedido: Este proyecto está configurado para ${maxMonths} meses. El reporte de ${formData.report_month} ${formData.report_year} corresponde al mes ${currentMonthNumber}, lo cual supera el límite. Por favor ajusta la configuración del proyecto o corrige la fecha del reporte.`);
+      }
 
       // Regla de Video (Meses fijos: Junio, Octubre, Marzo)
       if (isVideoMonth && ensureArray(formData.videos).length === 0 && !formData.video_comment?.trim()) {
@@ -634,9 +717,37 @@ export default function ReportForm({ isViewMode = false }) {
                 value={formData.season_name}
                 required
                 disabled={isViewMode}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, season_name: e.target.value }))
-                }
+                onChange={(e) => {
+                  const newSeason = e.target.value;
+                  // Al cambiar de temporada, limpiamos entregables para empezar desde 0
+                  setFormData((p) => ({
+                    ...p,
+                    season_name: newSeason,
+                    // Resetear entregables — cada temporada empieza desde cero
+                    campaigns: [],
+                    videos: [],
+                    milkywire_material: [],
+                    social_links: [],
+                    photo_count: 0,
+                    post_count: 0,
+                    web_progress_percent: 0,
+                    web_url: p.web_url || "", // conservamos la URL de la web
+                    photo_comment: "",
+                    post_comment: "",
+                    web_comment: "",
+                    video_comment: "",
+                    campaign_comment: "",
+                    season_comment: "",
+                    video_general_comment: "",
+                    milkywire_general_comment: "",
+                    is_season_start: false,
+                    is_last_month: false,
+                  }));
+                  // Recargar campañas y reglas de la nueva temporada
+                  if (newSeason && project?.partners?.id) {
+                    loadGlobalSettings(newSeason, project.partners.id, formData.report_month);
+                  }
+                }}
               >
                 <option value="">-- Temporada --</option>
                 {availableSeasons.map((s) => (
@@ -911,6 +1022,47 @@ export default function ReportForm({ isViewMode = false }) {
           <h2 className="text-lg font-black text-gray-800 uppercase">
             Hitos de Difusión
           </h2>
+
+          {/* === ALERTAS DINÁMICAS DE CAMPAÑAS Y VIDEOS === */}
+          {formData.report_month && (
+            <div className="space-y-2">
+              {/* Alerta de Video */}
+              {isVideoMonth && (
+                <div className="flex items-center gap-3 bg-red-50 border-l-4 border-red-500 p-3 rounded-r-xl">
+                  <span className="text-lg">🎬</span>
+                  <p className="text-xs font-black text-red-800 uppercase tracking-tight">
+                    Mes de Video Obligatorio — Se requiere la entrega del video de temporada.
+                  </p>
+                </div>
+              )}
+
+              {/* Alertas de Campañas por fechas */}
+              {effectiveCampaignRules.map((camp, idx) => {
+                const alert = getCampaignAlert(camp);
+                if (!alert) return null;
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-3 p-3 rounded-r-xl border-l-4 ${
+                      alert === "red"
+                        ? "bg-red-50 border-red-500"
+                        : "bg-amber-50 border-amber-400"
+                    }`}
+                  >
+                    <span className="text-lg">{alert === "red" ? "🚨" : "⚠️"}</span>
+                    <div>
+                      <p className={`text-xs font-black uppercase tracking-tight ${alert === "red" ? "text-red-800" : "text-amber-800"}`}>
+                        {alert === "red"
+                          ? `¡Último mes! "${camp.title}" debe estar registrada.`
+                          : `En progreso: "${camp.title}" (Límite: ${camp.end_month})`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* =======================================================
               CAMPAÑAS GLOBALES (Reescrito)

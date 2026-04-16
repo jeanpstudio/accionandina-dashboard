@@ -42,6 +42,7 @@ import {
   Hash,
   Lock, // <--- IMPORTANTE: Icono de seguridad
   Eye, // <--- ICONO DE VISTA
+  Trash2, // <--- ICONO DE ELIMINAR
 } from "lucide-react";
 
 /**
@@ -57,7 +58,7 @@ export default function History() {
   const [project, setProject] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSeason, setSelectedSeason] = useState("TODAS");
+  const [selectedSeason, setSelectedSeason] = useState(null); // null = auto-selecciona la más reciente
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedMonthForReport, setSelectedMonthForReport] = useState(null);
 
@@ -147,6 +148,32 @@ export default function History() {
     }
   }
 
+  // --- FUNCIÓN PARA ELIMINAR REPORTE ---
+  async function handleDeleteReport(reportId, month) {
+    if (
+      !window.confirm(
+        `¿Estás seguro de que deseas eliminar el reporte de ${month}? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("monthly_reports")
+        .delete()
+        .eq("id", reportId);
+
+      if (error) throw error;
+
+      alert("✅ Reporte eliminado correctamente");
+      fetchHistory(); // Recargar datos
+    } catch (err) {
+      console.error("Error al eliminar:", err);
+      alert("❌ Error al eliminar el reporte: " + err.message);
+    }
+  }
+
   // --- HELPER PARA FORMATEAR NÚMEROS ---
   const fmt = (value) => {
     const num = parseFloat(value);
@@ -156,12 +183,16 @@ export default function History() {
 
   const uniqueSeasons = [
     "TODAS",
-    ...new Set(reports.map((r) => r.season_name)),
+    ...[...new Set(reports.map((r) => r.season_name).filter(Boolean))].sort(),
   ];
+
+  // Si no hay temporada seleccionada manualmente, auto-seleccionar la más reciente
+  const activeSeason = selectedSeason || (uniqueSeasons.length > 1 ? uniqueSeasons[uniqueSeasons.length - 1] : "TODAS");
+
   const filteredReports =
-    selectedSeason === "TODAS"
+    activeSeason === "TODAS"
       ? reports
-      : reports.filter((r) => r.season_name === selectedSeason);
+      : reports.filter((r) => r.season_name === activeSeason);
   const normalize = (str) => (str ? str.toString().toLowerCase().trim() : "");
 
   // --- HELPERS DE CÁLCULO ---
@@ -268,6 +299,18 @@ export default function History() {
         targetPosts,
       ).gainedNumber;
     });
+    // Totales de campañas y videos de la temporada
+    let totalUniqueCampaigns = new Set();
+    let totalVideosCount = 0;
+    filteredReports.forEach((r) => {
+      if (Array.isArray(r.campaigns)) {
+        r.campaigns.forEach(c => { if (c.title) totalUniqueCampaigns.add(c.title); });
+      }
+      if (Array.isArray(r.videos)) {
+        totalVideosCount += r.videos.length;
+      }
+    });
+
     return {
       totalPhotos,
       totalPosts,
@@ -276,6 +319,8 @@ export default function History() {
       accPostPercent: accPostPercent,
       expectedPhotos: filteredReports.length * targetPhotos,
       expectedPosts: filteredReports.length * targetPosts,
+      totalCampaigns: totalUniqueCampaigns.size,
+      totalVideos: totalVideosCount,
     };
   };
   const seasonStats = calculateSeasonStats();
@@ -798,6 +843,48 @@ export default function History() {
               <span className="text-[10px] font-bold text-gray-400 mt-2 uppercase tracking-wide">
                 {health.msg}
               </span>
+
+              {/* === AVISOS DINÁMICOS: CAMPAÑAS Y VIDEOS PENDIENTES === */}
+              {(() => {
+                const MONTHS_ORDER = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+                const warnings = [];
+                const proj = project;
+
+                // Determinar meses de video efectivos
+                const effectiveVideoMonths = proj?.override_season_rules && Array.isArray(proj.custom_video_months)
+                  ? proj.custom_video_months
+                  : ["Junio", "Octubre", "Marzo"];
+
+                // Calcular cuántos videos de temporada se esperan hasta el mes del último reporte
+                const lastReport = [...filteredReports].sort((a, b) => {
+                  const yA = parseInt(a.report_year), yB = parseInt(b.report_year);
+                  if (yA !== yB) return yB - yA;
+                  return MONTHS_ORDER.indexOf(b.report_month) - MONTHS_ORDER.indexOf(a.report_month);
+                })[0];
+
+                if (lastReport) {
+                  const lastMIdx = MONTHS_ORDER.indexOf(lastReport.report_month);
+                  const expectedVideoCount = effectiveVideoMonths.filter(
+                    m => MONTHS_ORDER.indexOf(m) <= lastMIdx
+                  ).length;
+                  const actualVideos = seasonStats.totalVideos || 0;
+                  const missingVideos = expectedVideoCount - actualVideos;
+                  if (missingVideos > 0) {
+                    warnings.push({ type: "red", msg: `Faltan ${missingVideos} video${missingVideos > 1 ? "s" : ""} de temporada` });
+                  }
+                }
+
+                return warnings.length > 0 ? (
+                  <div className="mt-3 space-y-1.5">
+                    {warnings.map((w, i) => (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide ${w.type === "red" ? "bg-red-50 text-red-600 border border-red-100" : "bg-amber-50 text-amber-600 border border-amber-100"}`}>
+                        <span>{w.type === "red" ? "🚨" : "⚠️"}</span>
+                        {w.msg}
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
           <div className="w-px h-24 bg-gray-100 hidden md:block"></div>
@@ -901,6 +988,13 @@ export default function History() {
                       title="Editar Reporte"
                     >
                       <Edit size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteReport(report.id, report.report_month)}
+                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"
+                      title="Eliminar Reporte"
+                    >
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 )}

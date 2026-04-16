@@ -114,6 +114,10 @@ export default function Supervision() {
   const [settingsTab, setSettingsTab] = useState("campaigns"); // Sub-pestaña: "campaigns" | "milkywire"
   const [seasonCampaigns, setSeasonCampaigns] = useState([]); // Lista dinámica de campañas globals
   const [newCampaignTitle, setNewCampaignTitle] = useState("");
+  const [newCampaignStartMonth, setNewCampaignStartMonth] = useState("Enero");
+  const [newCampaignEndMonth, setNewCampaignEndMonth] = useState("Diciembre");
+  const [seasonVideoMonths, setSeasonVideoMonths] = useState([]);
+  const [isUpdatingVideoMonths, setIsUpdatingVideoMonths] = useState(false);
   const [milkywireSchedule, setMilkywireSchedule] = useState([]); // Cronograma generado para Milkywire
   const [isGeneratingMilky, setIsGeneratingMilky] = useState(false);
   /** Interruptor global: oculta Milkywire en parametrización, reportes e historial (localStorage). */
@@ -252,6 +256,18 @@ export default function Supervision() {
       .eq("season_name", season)
       .order("target_month");
     setMilkywireSchedule(milky || []);
+
+    // 3. Meses de Video de la temporada (season_registry)
+    const { data: reg } = await supabase
+      .from("season_registry")
+      .select("video_months")
+      .eq("season_name", season)
+      .single();
+    if (reg?.video_months) {
+      setSeasonVideoMonths(Array.isArray(reg.video_months) ? reg.video_months : []);
+    } else {
+      setSeasonVideoMonths(["Junio", "Octubre", "Marzo"]); // Default fallback
+    }
   }
 
   /**
@@ -562,12 +578,42 @@ export default function Supervision() {
     if (!newCampaignTitle.trim()) return;
     const { error } = await supabase.from("season_campaigns").insert([{
       season_name: activeSeason,
-      title: newCampaignTitle.trim()
+      title: newCampaignTitle.trim(),
+      start_month: newCampaignStartMonth,
+      end_month: newCampaignEndMonth
     }]);
     if (error) alert(error.message);
     else {
       setNewCampaignTitle("");
       loadSeasonSettings(activeSeason);
+    }
+  };
+
+  /**
+   * handleUpdateVideoMonth: Toggle un mes en la lista de meses de video globales.
+   */
+  const handleToggleVideoMonth = async (month) => {
+    if (isUpdatingVideoMonths) return;
+    setIsUpdatingVideoMonths(true);
+    try {
+      let updated;
+      if (seasonVideoMonths.includes(month)) {
+        updated = seasonVideoMonths.filter(m => m !== month);
+      } else {
+        updated = [...seasonVideoMonths, month];
+      }
+      
+      const { error } = await supabase
+        .from("season_registry")
+        .update({ video_months: updated })
+        .eq("season_name", activeSeason);
+        
+      if (error) throw error;
+      setSeasonVideoMonths(updated);
+    } catch (err) {
+      alert("Error actualizando meses de video: " + err.message);
+    } finally {
+      setIsUpdatingVideoMonths(false);
     }
   };
 
@@ -1645,22 +1691,79 @@ export default function Supervision() {
                       <span className="bg-brand text-white px-3 py-1 rounded-full text-[10px] font-black">{seasonCampaigns.length}</span>
                     </div>
 
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="Nueva Campaña (Ej: Día del Arbol)..." value={newCampaignTitle} onChange={(e) => setNewCampaignTitle(e.target.value)} className="flex-1 bg-gray-50 border-none rounded-xl p-4 font-bold text-sm outline-none placeholder-gray-300" />
-                      <button onClick={handleAddSeasonCampaign} className="bg-brand text-white px-6 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-green-700 transition-colors">Añadir</button>
+                    <div className="bg-gray-50 p-4 sm:p-6 rounded-2xl space-y-4 border border-gray-100">
+                      <p className="text-[10px] font-black text-brand uppercase tracking-widest mb-2">Añadir Nueva Campaña</p>
+                      <input type="text" placeholder="Nombre de la Campaña (Ej: Día del Arbol)..." value={newCampaignTitle} onChange={(e) => setNewCampaignTitle(e.target.value)} className="w-full bg-white border-none rounded-xl p-4 font-bold text-sm outline-none shadow-sm" />
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mes Inicio</label>
+                          <select 
+                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm"
+                            value={newCampaignStartMonth}
+                            onChange={(e) => setNewCampaignStartMonth(e.target.value)}
+                          >
+                            {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mes Límite</label>
+                          <select 
+                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm"
+                            value={newCampaignEndMonth}
+                            onChange={(e) => setNewCampaignEndMonth(e.target.value)}
+                          >
+                            {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <button onClick={handleAddSeasonCampaign} className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest hover:brightness-110 transition-all shadow-md mt-2">Crear Campaña</button>
                     </div>
 
-                    <div className="space-y-2 mt-4">
+                    <div className="space-y-2 mt-6">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Campañas Registradas</p>
                       {seasonCampaigns.length === 0 ? (
                         <div className="p-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-50 rounded-2xl border border-dashed border-gray-200">No hay campañas para {activeSeason}</div>
                       ) : (
                         seasonCampaigns.map(camp => (
                           <div key={camp.id} className="flex justify-between items-center bg-white border border-gray-100 p-4 rounded-2xl shadow-sm hover:border-brand/30 transition-colors">
-                            <span className="text-xs font-black text-gray-800 uppercase flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-brand"></div> {camp.title}</span>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-black text-gray-800 uppercase flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-brand"></div> {camp.title}
+                              </span>
+                              <span className="text-[9px] font-bold text-gray-400 uppercase mt-1 pl-4">
+                                {camp.start_month} → {camp.end_month || "Sin límite"}
+                              </span>
+                            </div>
                             <button onClick={() => handleDeleteSeasonCampaign(camp.id)} className="text-gray-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
                           </div>
                         ))
                       )}
+                    </div>
+
+                    {/* SECCIÓN VIDEOS GLOBALES */}
+                    <div className="pt-8 mt-8 border-t border-gray-100 space-y-6">
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 uppercase">Videos de Temporada (Global)</h3>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Selecciona los meses en los que TODOS los socios deben subir video.</p>
+                      </div>
+
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map(mes => (
+                          <button
+                            key={mes}
+                            onClick={() => handleToggleVideoMonth(mes)}
+                            className={`p-2 rounded-xl text-[9px] font-black uppercase transition-all border-2 ${seasonVideoMonths.includes(mes) ? "bg-brand/10 border-brand text-brand" : "bg-gray-50 border-gray-100 text-gray-400 hover:border-gray-300"}`}
+                          >
+                            {mes}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
