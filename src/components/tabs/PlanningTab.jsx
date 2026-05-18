@@ -95,29 +95,39 @@ export default function PlanningTab({
 
   const handleDropTask = async (e, targetWeek) => {
     e.preventDefault();
+    // El id de Supabase es UUID (string) — NO parsear a número
     const taskId = e.dataTransfer.getData("taskId");
     if (!taskId) return;
 
     /**
      * IMPORTANTE (regla de negocio):
      * Arrastrar en la pestaña de Planificación SOLO reubica la tarea en una semana (target_week).
-     * 
-     * FIX: Las tareas de backlog (is_backlog=true) estaban bloqueadas en semana 1 por
-     * isTaskVisibleInWeek(). Al arrastrar una tarea backlog a otra semana, ahora también
-     * se guarda is_backlog=false para que el posicionamiento sea respetado.
-     * 
-     * No modifica month_key ni start_date/end_date (esas fechas las define el usuario en Ejecución).
+     * También se limpia start_date para que isTaskVisibleInWeek respete target_week
+     * y la tarea aparezca en la semana correcta inmediatamente.
+     *
+     * FIX: Las tareas de backlog (is_backlog=true) también se "rescatan" del backlog al moverlas.
      */
-    const draggedTask = tasks.find((t) => t.id === taskId || t.id === parseInt(taskId));
+    // Comparar como string (UUID) — String(t.id) por si acaso viene como otro tipo
+    const draggedTask = tasks.find((t) => String(t.id) === String(taskId));
     const updatePayload = { target_week: targetWeek };
-    // Si era una tarea backlog y el usuario la mueve, la "rescatamos" del backlog
-    if (draggedTask?.is_backlog) {
-      updatePayload.is_backlog = false;
+
+    // Si la tarea tiene start_date, limpiarla para que target_week tome el mando
+    // (evita que isTaskVisibleInWeek la siga posicionando según fechas antiguas)
+    if (draggedTask?.start_date) {
+      updatePayload.start_date = null;
+      updatePayload.end_date = null;
     }
-    await supabase
+
+    const { error } = await supabase
       .from("personal_tasks")
       .update(updatePayload)
-      .eq("id", taskId);
+      .eq("id", taskId); // UUID se pasa como string directamente
+
+    if (error) {
+      console.error("[handleDropTask] Error al mover tarea:", error);
+      alert("Error al mover la tarea: " + error.message);
+      return;
+    }
     onUpdate();
   };
 
@@ -152,44 +162,39 @@ export default function PlanningTab({
     const currentMonthDate = new Date(currentYear, currentMonth, 1);
     const viewingMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
-    // 1. Tareas sin fechas: Respetamos target_week
-    // FIX: Las tareas backlog ya no se fuerzan a semana 1 si tienen target_week definido
-    // (el usuario las puede reubicar arrastrando; is_backlog=false se guarda en el drop)
+    // 1. Tareas SIN fechas: target_week manda siempre.
+    // (incluye tareas de backlog que el usuario haya movido con drag-and-drop)
     if (!task.start_date) {
-      if (task.is_backlog && !task.target_week) return weekNum === 1;
-      if (task.is_backlog) return parseInt(task.target_week) === weekNum;
-      return parseInt(task.target_week) === weekNum;
+      const tw = parseInt(task.target_week);
+      // Si no tiene target_week, por defecto va a semana 1
+      return (isNaN(tw) ? 1 : tw) === weekNum;
     }
 
-    // 2. Tareas con fechas:
+    // 2. Tareas CON fechas:
     const taskStart = new Date(task.start_date + "T12:00:00");
     const taskEnd = task.end_date
       ? new Date(task.end_date + "T12:00:00")
       : taskStart;
 
     /**
-     * REGLA DE ORO PARA PLANIFICACIÓN: 
-     * Si la tarea pertenece al mes que estamos viendo (month_key), siempre debe ser 
-     * visible en su semana proyectada (target_week), independientemente de sus fechas 
-     * de ejecución real. Esto garantiza que la "intención" original no desaparezca.
+     * REGLA DE ORO PARA PLANIFICACIÓN:
+     * target_week tiene precedencia sobre las fechas reales.
+     * Esto garantiza que mover una tarea con drag-and-drop funcione aunque tenga fechas.
      */
-    if (task.month_key === viewingMonthKey && parseInt(task.target_week) === weekNum) {
-      return true;
+    if (task.target_week && parseInt(task.target_week) === weekNum) {
+      // Solo mostramos en esta semana si la tarea pertenece al mes visualizado
+      // o si es un backlog que el usuario reubicó explícitamente
+      if (task.month_key === viewingMonthKey || task.is_backlog) {
+        return true;
+      }
     }
-
-    /**
-     * ERROR ANTERIOR: Aquí había un 'return' que bloqueaba la evaluación del rango 
-     * si la tarea era del mes actual. Al quitarlo (o condicionarlo), permitimos que 
-     * una tarea del mes actual se vea en MÚLTIPLES semanas si su rango lo indica.
-     */
 
     // Prorrogar visibilidad si está pendiente y terminó antes del mes actual (Overdue)
     if (task.status !== "COMPLETADO" && taskEnd < currentMonthDate) {
       return weekNum === 1;
     }
 
-    // Verificar si la tarea cruza el mes y la semana solicitada
-    // Iniciamos el loop en el inicio de la tarea o el inicio del mes (lo que sea posterior)
+    // Verificar si la tarea cruza el mes y la semana solicitada por rango de fechas
     let loop = new Date(taskStart);
     if (loop < currentMonthDate) loop = new Date(currentMonthDate);
 
@@ -203,7 +208,6 @@ export default function PlanningTab({
         const calcWeek = Math.ceil((loop.getDate() + firstDayOfMonth) / 7);
         if (calcWeek === weekNum) return true;
       } else {
-        // Si ya salimos del mes visualizado, terminamos la búsqueda
         if (loop > currentMonthDate) break;
       }
       loop.setDate(loop.getDate() + 1);
@@ -240,7 +244,7 @@ export default function PlanningTab({
           `<tr style="height:30px;"><td style="border:1px solid #000;padding:8px;font-family:Arial;">${t.description}</td><td style="border:1px solid #000;padding:8px;font-family:Arial;"></td></tr>`,
       )
       .join("");
-    const htmlContent = `<html><body><p style="font-family:Arial;font-weight:bold;">Area Comunicaciones - ACTIVIDADES SEMANALES ${summaryOptions.week}</p><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#f3f4f6;"><th style="border:1px solid #000;padding:8px;font-family:Arial;">ACTIVIDADES</th><th style="border:1px solid #000;padding:8px;width:200px;font-family:Arial;">PRODUCTO</th></tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+    const htmlContent = `<html><body><p style="font-family:Arial;font-weight:bold;">Area Comunicaciones - ACTIVIDADES SEMANALES ${summaryOptions.week}</p><table style="width:100%;border-collapse:collapse;border:1px solid #000;"><thead><tr style="background:#f3f4f6;"><th style="border:1px solid #000;padding:8px;font-family:Arial;">ACTIVIDADES</th><th style="border:1px solid #000;padding:8px;width:200px;font-family:Arial;">PRODUCTO</th></tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
