@@ -723,7 +723,8 @@ export default function ReportForm({ isViewMode = false }) {
                   setFormData((p) => ({
                     ...p,
                     season_name: newSeason,
-                    // Resetear entregables — cada temporada empieza desde cero
+                    // Nueva temporada = historial limpio, no hereda del mes anterior
+                    report_month: months[0], // Resetear al mes inicial por defecto
                     campaigns: [],
                     videos: [],
                     milkywire_material: [],
@@ -743,16 +744,18 @@ export default function ReportForm({ isViewMode = false }) {
                     is_season_start: false,
                     is_last_month: false,
                   }));
-                  // Recargar campañas y reglas de la nueva temporada
+                  // Recargar campañas y reglas de la nueva temporada (con mes vacío inicialmente)
                   if (newSeason && project?.partners?.id) {
-                    loadGlobalSettings(newSeason, project.partners.id, formData.report_month);
+                    loadGlobalSettings(newSeason, project.partners.id, "");
                   }
+                  // Guardar en localStorage para que la próxima pantalla sepa qué temporada usar
+                  try { localStorage.setItem("aa_supervision_active_season", newSeason); } catch {}
                 }}
               >
                 <option value="">-- Temporada --</option>
                 {availableSeasons.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s}{s === availableSeasons[availableSeasons.length - 1] ? " (más reciente)" : ""}
                   </option>
                 ))}
               </select>

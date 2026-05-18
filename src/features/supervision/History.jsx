@@ -58,7 +58,7 @@ export default function History() {
   const [project, setProject] = useState(null);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSeason, setSelectedSeason] = useState(null); // null = auto-selecciona la más reciente
+  const [selectedSeason, setSelectedSeason] = useState(null); // null = auto-select la más reciente
   const [showExportModal, setShowExportModal] = useState(false);
   const [selectedMonthForReport, setSelectedMonthForReport] = useState(null);
 
@@ -186,8 +186,10 @@ export default function History() {
     ...[...new Set(reports.map((r) => r.season_name).filter(Boolean))].sort(),
   ];
 
-  // Si no hay temporada seleccionada manualmente, auto-seleccionar la más reciente
-  const activeSeason = selectedSeason || (uniqueSeasons.length > 1 ? uniqueSeasons[uniqueSeasons.length - 1] : "TODAS");
+  // Auto-seleccionar la temporada más reciente con datos al cargar el historial
+  // Si el usuario selecciona explícitamente "TODAS", respetamos esa elección
+  const latestSeason = uniqueSeasons.length > 1 ? uniqueSeasons[uniqueSeasons.length - 1] : "TODAS";
+  const activeSeason = selectedSeason !== null ? selectedSeason : latestSeason;
 
   const filteredReports =
     activeSeason === "TODAS"

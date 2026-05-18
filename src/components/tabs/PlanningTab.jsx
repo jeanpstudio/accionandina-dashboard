@@ -25,6 +25,7 @@ import {
   List,
   CheckCircle2,
   FileDown,
+  Search,
 } from "lucide-react";
 
 export default function PlanningTab({
@@ -41,6 +42,8 @@ export default function PlanningTab({
   const [editingTask, setEditingTask] = useState(null);
   const [sortOrder, setSortOrder] = useState("PRIORITY");
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  // Buscador de tareas
+  const [taskSearch, setTaskSearch] = useState("");
 
   // Estado para Resumen Semanal
   const [summaryOptions, setSummaryOptions] = useState({
@@ -98,18 +101,22 @@ export default function PlanningTab({
     /**
      * IMPORTANTE (regla de negocio):
      * Arrastrar en la pestaña de Planificación SOLO reubica la tarea en una semana (target_week).
-     * No debe:
-     * - cambiar el `month_key` (eso haría que "desaparezca" del mes donde fue creada),
-     * - ni resetear `start_date` / `end_date` (esas fechas las define el usuario en Ejecución).
-     *
-     * Si una tarea ya tiene fechas, su visibilidad semanal la determina el rango de fechas
-     * (ver `isTaskVisibleInWeek`). Por eso aquí no tocamos fechas.
+     * 
+     * FIX: Las tareas de backlog (is_backlog=true) estaban bloqueadas en semana 1 por
+     * isTaskVisibleInWeek(). Al arrastrar una tarea backlog a otra semana, ahora también
+     * se guarda is_backlog=false para que el posicionamiento sea respetado.
+     * 
+     * No modifica month_key ni start_date/end_date (esas fechas las define el usuario en Ejecución).
      */
+    const draggedTask = tasks.find((t) => t.id === taskId || t.id === parseInt(taskId));
+    const updatePayload = { target_week: targetWeek };
+    // Si era una tarea backlog y el usuario la mueve, la "rescatamos" del backlog
+    if (draggedTask?.is_backlog) {
+      updatePayload.is_backlog = false;
+    }
     await supabase
       .from("personal_tasks")
-      .update({
-        target_week: targetWeek,
-      })
+      .update(updatePayload)
       .eq("id", taskId);
     onUpdate();
   };
@@ -129,15 +136,28 @@ export default function PlanningTab({
   };
 
   // --- LÓGICA DE VISIBILIDAD ---
+  // Filtra tareas por búsqueda (descripción o categoría)
+  const matchesSearch = (task) => {
+    if (!taskSearch.trim()) return true;
+    const q = taskSearch.toLowerCase();
+    return (
+      task.description?.toLowerCase().includes(q) ||
+      task.category?.toLowerCase().includes(q)
+    );
+  };
+
   const isTaskVisibleInWeek = (task, weekNum) => {
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const currentMonthDate = new Date(currentYear, currentMonth, 1);
     const viewingMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
-    // 1. Tareas sin fechas: Respetamos target_week o forzamos Semana 1 si es backlog
+    // 1. Tareas sin fechas: Respetamos target_week
+    // FIX: Las tareas backlog ya no se fuerzan a semana 1 si tienen target_week definido
+    // (el usuario las puede reubicar arrastrando; is_backlog=false se guarda en el drop)
     if (!task.start_date) {
-      if (task.is_backlog) return weekNum === 1;
+      if (task.is_backlog && !task.target_week) return weekNum === 1;
+      if (task.is_backlog) return parseInt(task.target_week) === weekNum;
       return parseInt(task.target_week) === weekNum;
     }
 
@@ -394,9 +414,33 @@ export default function PlanningTab({
         </div>
       </div>
 
+      {/* BUSCADOR DE TAREAS */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-gray-400">
+          <Search size={16} />
+        </div>
+        <input
+          type="text"
+          placeholder="Buscar tarea por descripción o categoría..."
+          value={taskSearch}
+          onChange={(e) => setTaskSearch(e.target.value)}
+          className="w-full pl-12 pr-4 py-4 bg-white border-2 border-transparent focus:border-brand rounded-2xl text-sm font-bold outline-none transition-all shadow-sm"
+        />
+        {taskSearch && (
+          <button
+            onClick={() => setTaskSearch("")}
+            className="absolute inset-y-0 right-0 pr-5 flex items-center text-gray-300 hover:text-gray-600"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       {/* 2. COLUMNAS SEMANALES (MEJORADO: Adaptable + Espaciado) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
+        {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => {
+          const visibleTasks = tasks.filter((t) => isTaskVisibleInWeek(t, week) && matchesSearch(t));
+          return (
           <div
             key={week}
             onDragOver={(e) => e.preventDefault()}
@@ -408,31 +452,36 @@ export default function PlanningTab({
                 Semana {week}
               </h4>
               <span className="bg-gray-50 text-gray-400 text-[10px] font-black px-2 py-1 rounded-lg uppercase">
-                {tasks.filter((t) => isTaskVisibleInWeek(t, week)).length}
+                {visibleTasks.length}
               </span>
             </div>
             <div className="space-y-2 flex-1 min-h-[100px]">
-              {" "}
-              {/* Space-y-2 para más compacto */}
-              {tasks
-                .filter((t) => isTaskVisibleInWeek(t, week))
-                .map((task) => (
+              {visibleTasks.map((task) => (
                   <div
                     key={task.id}
                     draggable
                     onDragStart={(e) =>
                       e.dataTransfer.setData("taskId", task.id)
                     }
-                    className="group flex justify-between items-center p-2.5 bg-gray-50/50 rounded-xl hover:bg-white hover:shadow-md cursor-grab active:cursor-grabbing transition-all border border-transparent hover:border-gray-200 relative"
+                    className={`group flex justify-between items-center p-2.5 rounded-xl hover:bg-white hover:shadow-md cursor-grab active:cursor-grabbing transition-all border hover:border-gray-200 relative ${
+                      task.is_backlog
+                        ? "bg-amber-50/60 border-amber-200/60"
+                        : "bg-gray-50/50 border-transparent"
+                    }`}
                   >
                     <div className="flex-1 pr-2">
                       <div className="flex gap-2 mb-1 justify-between">
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 items-center">
                           <span
                             className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border ${getPriorityColor(task.priority)}`}
                           >
                             P{task.priority}
                           </span>
+                          {task.is_backlog && (
+                            <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border bg-amber-100 border-amber-200 text-amber-700">
+                              Anterior
+                            </span>
+                          )}
                         </div>
                         <ArrowUpDown
                           size={12}
@@ -464,18 +513,18 @@ export default function PlanningTab({
                     </div>
                   </div>
                 ))}
-              {tasks.filter((t) => isTaskVisibleInWeek(t, week)).length ===
-                0 && (
+              {visibleTasks.length === 0 && (
                   <div className="text-center py-8 opacity-30">
                     <Layout size={20} className="mx-auto mb-1 text-gray-300" />
                     <p className="text-[8px] font-black uppercase text-gray-400">
-                      Vacío
+                      {taskSearch ? "Sin resultados" : "Vacío"}
                     </p>
                   </div>
                 )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* LISTA RESUMEN */}

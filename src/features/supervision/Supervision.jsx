@@ -54,6 +54,7 @@ import {
   CheckCircle2,
   Copy,
   Eraser,
+  CalendarPlus,
 } from "lucide-react";
 
 /**
@@ -517,6 +518,25 @@ export default function Supervision() {
     if (s === "PAUSADO") return "bg-amber-100 text-amber-700";
     return "bg-emerald-100 text-emerald-700";
   };
+
+  /**
+   * Extiende un proyecto 1 mes más (incrementa season_duration_months).
+   * Útil para proyectos que llegaron al límite y necesitan continuar un mes más (ej: de marzo a abril).
+   */
+  async function extendProjectByOneMonth(projectId, currentDuration, projectName) {
+    if (isReadOnly) return;
+    const newDuration = (parseInt(currentDuration) || 12) + 1;
+    if (!confirm(`¿Extender "${projectName}" 1 mes más? (${currentDuration} → ${newDuration} meses)`)) return;
+    const { error } = await supabase
+      .from("projects")
+      .update({ season_duration_months: newDuration })
+      .eq("id", projectId);
+    if (error) alert(error.message);
+    else {
+      alert(`✅ Proyecto extendido a ${newDuration} meses.`);
+      fetchData();
+    }
+  }
 
   /**
    * handleCreateUser: Registra un nuevo acceso en Supabase Auth y crea el perfil en 'profiles'.
@@ -1236,16 +1256,28 @@ export default function Supervision() {
                                     </>
                                   )}
                                   {!isReadOnly && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate(`/edit-project/${project.id}`);
-                                      }}
-                                      className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                      title="Configurar Paisaje"
-                                    >
-                                      <Settings size={14} />
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          extendProjectByOneMonth(project.id, project.season_duration_months, project.name);
+                                        }}
+                                        className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                        title={`Extender +1 mes (actualmente ${project.season_duration_months || 12} meses)`}
+                                      >
+                                        <CalendarPlus size={14} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/edit-project/${project.id}`);
+                                        }}
+                                        className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                        title="Configurar Paisaje"
+                                      >
+                                        <Settings size={14} />
+                                      </button>
+                                    </>
                                   )}
                                   {!isReadOnly && normalizeProjectStatus(project.status) === "CERRADO" && (
                                     <span className="text-[8px] font-black text-gray-400 uppercase px-1">
