@@ -673,11 +673,12 @@ export default function PlanningTab({
                 <th className="pb-4">Semana</th>
                 <th className="pb-4">Prioridad</th>
                 <th className="pb-4">Estado</th>
-                <th className="pb-4 pr-4 text-right">Progreso</th>
+                <th className="pb-4 text-right">Progreso</th>
+                <th className="pb-4 pr-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="text-sm">
-              {sortedTasks.map((t) => (
+              {sortedTasks.filter(matchesSearch).map((t) => (
                 <tr
                   key={t.id}
                   className="border-b border-gray-50 hover:bg-gray-50/50"
@@ -707,7 +708,7 @@ export default function PlanningTab({
                       {t.status}
                     </span>
                   </td>
-                  <td className="py-4 pr-4">
+                  <td className="py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
@@ -720,8 +721,36 @@ export default function PlanningTab({
                       </span>
                     </div>
                   </td>
+                  <td className="py-4 pr-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingTask(t);
+                          setIsEditModalOpen(true);
+                        }}
+                        className="text-gray-400 hover:text-blue-500 p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        title="Editar tarea"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(t.id)}
+                        className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        title="Eliminar tarea"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
+              {sortedTasks.filter(matchesSearch).length === 0 && (
+                <tr>
+                  <td colSpan="7" className="py-8 text-center opacity-30 italic text-xs font-bold text-gray-400 uppercase">
+                    Sin resultados
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
