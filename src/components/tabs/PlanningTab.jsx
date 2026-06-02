@@ -99,23 +99,21 @@ export default function PlanningTab({
     const taskId = e.dataTransfer.getData("taskId");
     if (!taskId) return;
 
-    /**
-     * IMPORTANTE (regla de negocio):
-     * Arrastrar en la pestaña de Planificación SOLO reubica la tarea en una semana (target_week).
-     * También se limpia start_date para que isTaskVisibleInWeek respete target_week
-     * y la tarea aparezca en la semana correcta inmediatamente.
-     *
-     * FIX: Las tareas de backlog (is_backlog=true) también se "rescatan" del backlog al moverlas.
-     */
-    // Comparar como string (UUID) — String(t.id) por si acaso viene como otro tipo
     const draggedTask = tasks.find((t) => String(t.id) === String(taskId));
+    if (!draggedTask) return;
+
     const updatePayload = { target_week: targetWeek };
 
     // Si la tarea tiene start_date, limpiarla para que target_week tome el mando
     // (evita que isTaskVisibleInWeek la siga posicionando según fechas antiguas)
-    if (draggedTask?.start_date) {
+    if (draggedTask.start_date) {
       updatePayload.start_date = null;
       updatePayload.end_date = null;
+    }
+
+    // Si es una tarea de backlog (de un mes anterior), al moverla la integramos al mes actual
+    if (draggedTask.is_backlog || draggedTask.month_key < monthKey) {
+      updatePayload.month_key = monthKey;
     }
 
     const { error } = await supabase
@@ -131,16 +129,61 @@ export default function PlanningTab({
     onUpdate();
   };
 
-  const handleQuickUpdate = async () => {
-    await supabase
+  const handleMoveTaskToWeek = async (taskId, targetWeek) => {
+    const taskToMove = tasks.find((t) => String(t.id) === String(taskId));
+    if (!taskToMove) return;
+
+    const updatePayload = { target_week: targetWeek };
+
+    // Si la tarea tiene start_date, limpiarla para que target_week tome el mando
+    if (taskToMove.start_date) {
+      updatePayload.start_date = null;
+      updatePayload.end_date = null;
+    }
+
+    // Si es una tarea de backlog (de un mes anterior), al moverla la integramos al mes actual
+    if (taskToMove.is_backlog || taskToMove.month_key < monthKey) {
+      updatePayload.month_key = monthKey;
+    }
+
+    const { error } = await supabase
       .from("personal_tasks")
-      .update({
-        description: editingTask.description,
-        category: editingTask.category,
-        priority: editingTask.priority,
-        target_week: editingTask.target_week,
-      })
+      .update(updatePayload)
+      .eq("id", taskId);
+
+    if (error) {
+      console.error("[handleMoveTaskToWeek] Error al mover tarea:", error);
+      alert("Error al mover la tarea: " + error.message);
+      return;
+    }
+    onUpdate();
+  };
+
+  const handleQuickUpdate = async () => {
+    const updatePayload = {
+      description: editingTask.description,
+      category: editingTask.category,
+      priority: editingTask.priority,
+      target_week: editingTask.target_week,
+    };
+
+    // Si era una tarea de backlog, la traemos al mes actual al actualizarla
+    if (editingTask.is_backlog || editingTask.month_key < monthKey) {
+      updatePayload.month_key = monthKey;
+      updatePayload.start_date = null;
+      updatePayload.end_date = null;
+    }
+
+    const { error } = await supabase
+      .from("personal_tasks")
+      .update(updatePayload)
       .eq("id", editingTask.id);
+
+    if (error) {
+      console.error("[handleQuickUpdate] Error al actualizar tarea:", error);
+      alert("Error al actualizar la tarea: " + error.message);
+      return;
+    }
     setIsEditModalOpen(false);
     onUpdate();
   };
@@ -156,64 +199,88 @@ export default function PlanningTab({
     );
   };
 
+  // Calcula dinámicamente el rango de fechas que cubre una semana específica
+  const getWeekDateRange = (weekNum, date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    let firstDay = null;
+    let lastDay = null;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const calcWeek = Math.ceil((d + firstDayOfMonth) / 7);
+      if (calcWeek === weekNum) {
+        if (firstDay === null) firstDay = d;
+        lastDay = d;
+      }
+    }
+
+    if (firstDay === null) return "";
+
+    const monthName = date.toLocaleDateString("es-ES", { month: "short" });
+    return `Del ${firstDay} al ${lastDay} de ${monthName}`;
+  };
+
   const isTaskVisibleInWeek = (task, weekNum) => {
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const currentMonthDate = new Date(currentYear, currentMonth, 1);
     const viewingMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
-    // 1. Tareas SIN fechas: target_week manda siempre.
-    // (incluye tareas de backlog que el usuario haya movido con drag-and-drop)
-    if (!task.start_date) {
-      const tw = parseInt(task.target_week);
-      // Si no tiene target_week, por defecto va a semana 1
-      return (isNaN(tw) ? 1 : tw) === weekNum;
-    }
-
-    // 2. Tareas CON fechas:
-    const taskStart = new Date(task.start_date + "T12:00:00");
-    const taskEnd = task.end_date
-      ? new Date(task.end_date + "T12:00:00")
-      : taskStart;
-
-    /**
-     * REGLA DE ORO PARA PLANIFICACIÓN:
-     * target_week tiene precedencia sobre las fechas reales.
-     * Esto garantiza que mover una tarea con drag-and-drop funcione aunque tenga fechas.
-     */
-    if (task.target_week && parseInt(task.target_week) === weekNum) {
-      // Solo mostramos en esta semana si la tarea pertenece al mes visualizado
-      // o si es un backlog que el usuario reubicó explícitamente
-      if (task.month_key === viewingMonthKey || task.is_backlog) {
-        return true;
-      }
-    }
-
-    // Prorrogar visibilidad si está pendiente y terminó antes del mes actual (Overdue)
-    if (task.status !== "COMPLETADO" && taskEnd < currentMonthDate) {
+    // --- CASO 1: Tareas de Backlog NO redistribuidas aún ---
+    // Si la tarea es de un mes anterior (backlog) y sigue teniendo su month_key antiguo (no reprogramado):
+    // Se muestra en la Semana 1 por defecto para que el usuario pueda verla e ir distribuyéndola.
+    if (task.month_key < viewingMonthKey && task.status !== "COMPLETADO") {
       return weekNum === 1;
     }
 
-    // Verificar si la tarea cruza el mes y la semana solicitada por rango de fechas
-    let loop = new Date(taskStart);
-    if (loop < currentMonthDate) loop = new Date(currentMonthDate);
+    // --- CASO 2: Tareas con Rango de Fechas Activo (Prioridad de Ejecución) ---
+    // Si la tarea tiene fechas de ejecución establecidas:
+    if (task.start_date) {
+      const taskStart = new Date(task.start_date + "T12:00:00");
+      const taskEnd = task.end_date
+        ? new Date(task.end_date + "T12:00:00")
+        : taskStart;
 
-    const firstDayOfMonth = currentMonthDate.getDay();
+      // Si la tarea cruza el mes y la semana solicitada por rango de fechas:
+      let loop = new Date(taskStart);
+      if (loop < currentMonthDate) loop = new Date(currentMonthDate);
 
-    while (loop <= taskEnd) {
-      if (
-        loop.getMonth() === currentMonth &&
-        loop.getFullYear() === currentYear
-      ) {
-        const calcWeek = Math.ceil((loop.getDate() + firstDayOfMonth) / 7);
-        if (calcWeek === weekNum) return true;
-      } else {
-        if (loop > currentMonthDate) break;
+      const firstDayOfMonth = currentMonthDate.getDay();
+      let matchesDateRange = false;
+
+      while (loop <= taskEnd) {
+        if (
+          loop.getMonth() === currentMonth &&
+          loop.getFullYear() === currentYear
+        ) {
+          const calcWeek = Math.ceil((loop.getDate() + firstDayOfMonth) / 7);
+          if (calcWeek === weekNum) {
+            matchesDateRange = true;
+            break;
+          }
+        } else {
+          if (loop > currentMonthDate) break;
+        }
+        loop.setDate(loop.getDate() + 1);
       }
-      loop.setDate(loop.getDate() + 1);
+
+      if (matchesDateRange) return true;
     }
 
-    return false;
+    // --- CASO 3: Planificación Semanal por target_week ---
+    // Si la tarea tiene un target_week asignado:
+    if (task.target_week !== null && task.target_week !== undefined && task.target_week !== "") {
+      const tw = parseInt(task.target_week);
+      if (!isNaN(tw)) {
+        return tw === weekNum;
+      }
+    }
+
+    // --- CASO 4: Por defecto ---
+    return weekNum === 1;
   };
 
   const getPriorityColor = (p) =>
@@ -451,13 +518,18 @@ export default function PlanningTab({
             onDrop={(e) => handleDropTask(e, week)}
             className="min-w-[250px] bg-white p-4 rounded-[24px] border-2 border-dashed border-gray-100 hover:border-brand/20 shadow-sm flex flex-col h-full transition-colors"
           >
-            <div className="flex justify-between items-center mb-3 border-b border-gray-50 pb-2">
-              <h4 className="text-lg font-black text-gray-900 uppercase tracking-tight">
-                Semana {week}
-              </h4>
-              <span className="bg-gray-50 text-gray-400 text-[10px] font-black px-2 py-1 rounded-lg uppercase">
-                {visibleTasks.length}
-              </span>
+            <div className="flex flex-col mb-3 border-b border-gray-50 pb-2">
+              <div className="flex justify-between items-center">
+                <h4 className="text-lg font-black text-gray-900 uppercase tracking-tight">
+                  Semana {week}
+                </h4>
+                <span className="bg-gray-50 text-gray-400 text-[10px] font-black px-2 py-1 rounded-lg uppercase">
+                  {visibleTasks.length}
+                </span>
+              </div>
+              <p className="text-[9px] font-bold text-gray-400 uppercase mt-1 tracking-wider">
+                {getWeekDateRange(week, currentDate)}
+              </p>
             </div>
             <div className="space-y-2 flex-1 min-h-[100px]">
               {visibleTasks.map((task) => (
@@ -467,53 +539,86 @@ export default function PlanningTab({
                     onDragStart={(e) =>
                       e.dataTransfer.setData("taskId", task.id)
                     }
-                    className={`group flex justify-between items-center p-2.5 rounded-xl hover:bg-white hover:shadow-md cursor-grab active:cursor-grabbing transition-all border hover:border-gray-200 relative ${
+                    className={`group flex flex-col p-2.5 rounded-xl hover:bg-white hover:shadow-md cursor-grab active:cursor-grabbing transition-all border hover:border-gray-200 relative ${
                       task.is_backlog
                         ? "bg-amber-50/60 border-amber-200/60"
                         : "bg-gray-50/50 border-transparent"
                     }`}
                   >
-                    <div className="flex-1 pr-2">
-                      <div className="flex gap-2 mb-1 justify-between">
-                        <div className="flex gap-1 items-center">
-                          <span
-                            className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border ${getPriorityColor(task.priority)}`}
-                          >
-                            P{task.priority}
-                          </span>
-                          {task.is_backlog && (
-                            <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border bg-amber-100 border-amber-200 text-amber-700">
-                              Anterior
+                    {/* Fila Superior: Contenido y Acciones (Editar/Borrar) */}
+                    <div className="flex justify-between items-start w-full">
+                      <div className="flex-1 pr-2">
+                        <div className="flex gap-2 mb-1 justify-between">
+                          <div className="flex gap-1 items-center">
+                            <span
+                              className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border ${getPriorityColor(task.priority)}`}
+                            >
+                              P{task.priority}
                             </span>
-                          )}
+                            {task.is_backlog && (
+                              <span className="text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase border bg-amber-100 border-amber-200 text-amber-700">
+                                Anterior
+                              </span>
+                            )}
+                          </div>
+                          <ArrowUpDown
+                            size={12}
+                            className="text-gray-300 opacity-0 group-hover:opacity-100"
+                          />
                         </div>
-                        <ArrowUpDown
-                          size={12}
-                          className="text-gray-300 opacity-0 group-hover:opacity-100"
-                        />
+                        <p
+                          className={`text-xs font-bold leading-snug ${task.status === "COMPLETADO" ? "text-gray-300 line-through" : "text-gray-700"}`}
+                        >
+                          {task.description}
+                        </p>
                       </div>
-                      <p
-                        className={`text-xs font-bold leading-snug ${task.status === "COMPLETADO" ? "text-gray-300 line-through" : "text-gray-700"}`}
-                      >
-                        {task.description}
-                      </p>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 bg-white/90 p-1 rounded shadow-sm">
+                        <button
+                          onClick={() => {
+                            setEditingTask(task);
+                            setIsEditModalOpen(true);
+                          }}
+                          className="text-gray-400 hover:text-blue-500"
+                        >
+                          <Pencil size={10} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 bg-white/90 p-1 rounded shadow-sm">
-                      <button
-                        onClick={() => {
-                          setEditingTask(task);
-                          setIsEditModalOpen(true);
-                        }}
-                        className="text-gray-400 hover:text-blue-500"
-                      >
-                        <Pencil size={10} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 size={10} />
-                      </button>
+
+                    {/* Fila Inferior: Selector Rápido de Semana (Siempre visible y táctil) */}
+                    <div className="mt-2.5 pt-2 border-t border-gray-100/70 flex items-center justify-between w-full">
+                      <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">
+                        Mover a:
+                      </span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: totalWeeks }, (_, wIdx) => wIdx + 1).map((wNum) => {
+                          // Se marca como activa si la tarea es visible en esta semana (ya sea por target_week o por sus fechas reales)
+                          const isActive = isTaskVisibleInWeek(task, wNum);
+                          return (
+                            <button
+                              key={wNum}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await handleMoveTaskToWeek(task.id, wNum);
+                              }}
+                              className={`w-5 h-5 rounded-md text-[9px] font-black transition-all cursor-pointer flex items-center justify-center ${
+                                isActive
+                                  ? "bg-brand text-white shadow-sm"
+                                  : "bg-gray-100/80 text-gray-500 hover:bg-gray-200/80 hover:text-gray-800"
+                              }`}
+                              title={`Mover a Semana ${wNum}`}
+                            >
+                              {wNum}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ))}
