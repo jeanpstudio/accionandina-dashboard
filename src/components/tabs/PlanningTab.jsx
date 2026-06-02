@@ -10,7 +10,7 @@
  * 4. EXPORTACIÓN: Funciones especializadas para copiar resúmenes en formato tabla (HTML) 
  *    compatibles con Google Docs/Sheets.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import {
   Plus,
@@ -26,6 +26,8 @@ import {
   CheckCircle2,
   FileDown,
   Search,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 
 export default function PlanningTab({
@@ -44,6 +46,11 @@ export default function PlanningTab({
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   // Buscador de tareas
   const [taskSearch, setTaskSearch] = useState("");
+  // Búsqueda global asíncrona
+  const [globalTasks, setGlobalTasks] = useState([]);
+  const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
+  // Subtareas en la modal de edición
+  const [newSubtaskText, setNewSubtaskText] = useState("");
 
   // Estado para Resumen Semanal
   const [summaryOptions, setSummaryOptions] = useState({
@@ -60,6 +67,116 @@ export default function PlanningTab({
     resource_link: "",
   });
   const [newCategory, setNewCategory] = useState("");
+
+  // --- HELPER PREVIEW ---
+  const getEmbedUrl = (url) => {
+    if (!url) return null;
+    if (url.includes("docs.google.com") && url.includes("/edit"))
+      return url.replace(/\/edit.*/, "/preview");
+    return url;
+  };
+
+  // --- SUBTAREAS EN MODAL EDICIÓN ---
+  const handleModalAddSubtask = () => {
+    if (!newSubtaskText.trim()) return;
+    const currentSubtasks = editingTask.subtasks || [];
+    const updatedSubtasks = [
+      ...currentSubtasks,
+      { id: Date.now(), text: newSubtaskText, completed: false }
+    ];
+    
+    const completedCount = updatedSubtasks.filter((t) => t.completed).length;
+    const newProgress = updatedSubtasks.length > 0 
+      ? Math.round((completedCount / updatedSubtasks.length) * 100) 
+      : editingTask.progress;
+
+    setEditingTask({
+      ...editingTask,
+      subtasks: updatedSubtasks,
+      progress: newProgress,
+      status: newProgress >= 100 ? "COMPLETADO" : editingTask.status
+    });
+    setNewSubtaskText("");
+  };
+
+  const handleModalToggleSubtask = (subId) => {
+    const today = new Date().toISOString().split("T")[0];
+    const updatedSubtasks = (editingTask.subtasks || []).map((t) => {
+      if (t.id === subId) {
+        const isNowCompleted = !t.completed;
+        return {
+          ...t,
+          completed: isNowCompleted,
+          completed_at: isNowCompleted ? today : null,
+        };
+      }
+      return t;
+    });
+
+    const completedCount = updatedSubtasks.filter((t) => t.completed).length;
+    const newProgress = updatedSubtasks.length > 0 
+      ? Math.round((completedCount / updatedSubtasks.length) * 100) 
+      : editingTask.progress;
+
+    setEditingTask({
+      ...editingTask,
+      subtasks: updatedSubtasks,
+      progress: newProgress,
+      status: newProgress >= 100 ? "COMPLETADO" : editingTask.status
+    });
+  };
+
+  const handleModalDeleteSubtask = (subId) => {
+    const updatedSubtasks = (editingTask.subtasks || []).filter((t) => t.id !== subId);
+    
+    let newProgress = editingTask.progress;
+    if (updatedSubtasks.length > 0) {
+      const completedCount = updatedSubtasks.filter((t) => t.completed).length;
+      newProgress = Math.round((completedCount / updatedSubtasks.length) * 100);
+    }
+
+    setEditingTask({
+      ...editingTask,
+      subtasks: updatedSubtasks,
+      progress: newProgress,
+      status: newProgress >= 100 ? "COMPLETADO" : editingTask.status
+    });
+  };
+
+  // --- EFECTO DE BÚSQUEDA GLOBAL DE SUPABASE (DEBOUNCED) ---
+  useEffect(() => {
+    if (!taskSearch.trim()) {
+      setGlobalTasks([]);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsSearchingGlobal(true);
+      try {
+        const { data, error } = await supabase
+          .from("personal_tasks")
+          .select("*")
+          .ilike("description", `%${taskSearch}%`)
+          .order("month_key", { ascending: false });
+
+        if (error) console.error(error);
+        else {
+          // Marcamos como backlog si su month_key es anterior al mes actual para que la UI lo reconozca
+          const markedData = (data || []).map((t) => ({
+            ...t,
+            is_backlog: t.month_key < monthKey,
+          }));
+          setGlobalTasks(markedData);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearchingGlobal(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [taskSearch, monthKey]);
 
   // --- HANDLERS BASE DE DATOS ---
   const handleSaveTask = async () => {
@@ -160,18 +277,26 @@ export default function PlanningTab({
   };
 
   const handleQuickUpdate = async () => {
+    const finalStatus =
+      editingTask.progress >= 100 ? "COMPLETADO" : editingTask.status;
+
     const updatePayload = {
       description: editingTask.description,
       category: editingTask.category,
       priority: editingTask.priority,
       target_week: editingTask.target_week,
+      start_date: editingTask.start_date || null,
+      end_date: editingTask.end_date || null,
+      estimated_hours: editingTask.estimated_hours || 0,
+      progress: editingTask.progress || 0,
+      status: finalStatus,
+      subtasks: editingTask.subtasks || [],
+      resource_link: editingTask.resource_link || "",
     };
 
     // Si era una tarea de backlog, la traemos al mes actual al actualizarla
     if (editingTask.is_backlog || editingTask.month_key < monthKey) {
       updatePayload.month_key = monthKey;
-      updatePayload.start_date = null;
-      updatePayload.end_date = null;
     }
 
     const { error } = await supabase
@@ -640,14 +765,20 @@ export default function PlanningTab({
       <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm mt-8">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter flex items-center gap-3">
-            <List className="text-brand" size={24} /> Resumen del Mes
+            <List className="text-brand" size={24} /> 
+            {taskSearch.trim() ? "Buscador Global de Actividades" : "Resumen del Mes"}
+            {taskSearch.trim() && isSearchingGlobal && (
+              <span className="text-xs font-bold text-gray-400 normal-case animate-pulse ml-1">
+                (Buscando...)
+              </span>
+            )}
           </h3>
 
           <div className="flex gap-2">
-            {/* BOTÓN EXPORTAR REPORTE (NUEVO) */}
+            {/* BOTÓN EXPORTAR REPORTE */}
             <button
               onClick={handleCopyMonthlyReport}
-              className="flex items-center gap-2 text-xs font-bold uppercase bg-brand/10 text-brand px-4 py-2 rounded-xl hover:bg-brand/20 transition-colors border border-brand/20"
+              className="flex items-center gap-2 text-xs font-bold uppercase bg-brand/10 text-brand px-4 py-2 rounded-xl hover:bg-brand/20 transition-colors border border-brand/20 cursor-pointer"
             >
               <FileDown size={14} /> Exportar Reporte
             </button>
@@ -658,7 +789,7 @@ export default function PlanningTab({
                   prev === "PRIORITY" ? "STATUS" : "PRIORITY",
                 )
               }
-              className="flex items-center gap-2 text-xs font-bold uppercase bg-gray-50 px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
+              className="flex items-center gap-2 text-xs font-bold uppercase bg-gray-50 px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 cursor-pointer"
             >
               <ArrowUpDown size={14} /> Ordenar: {sortOrder}
             </button>
@@ -669,6 +800,7 @@ export default function PlanningTab({
             <thead>
               <tr className="text-[10px] text-gray-400 uppercase tracking-widest border-b border-gray-100">
                 <th className="pb-4 pl-4">Actividad</th>
+                <th className="pb-4 pl-2">Mes</th>
                 <th className="pb-4">Categoría</th>
                 <th className="pb-4">Semana</th>
                 <th className="pb-4">Prioridad</th>
@@ -678,13 +810,16 @@ export default function PlanningTab({
               </tr>
             </thead>
             <tbody className="text-sm">
-              {sortedTasks.filter(matchesSearch).map((t) => (
+              {(taskSearch.trim() ? globalTasks : sortedTasks).map((t) => (
                 <tr
                   key={t.id}
                   className="border-b border-gray-50 hover:bg-gray-50/50"
                 >
                   <td className="py-4 pl-4 font-bold text-gray-700">
                     {t.description}
+                  </td>
+                  <td className="py-4 pl-2 text-xs font-semibold text-brand/70 uppercase">
+                    {t.month_key}
                   </td>
                   <td className="py-4">
                     <span className="text-[10px] bg-gray-100 px-2 py-1 rounded border border-gray-200 uppercase font-bold text-gray-500">
@@ -725,17 +860,20 @@ export default function PlanningTab({
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => {
-                          setEditingTask(t);
+                          setEditingTask({
+                            ...t,
+                            subtasks: t.subtasks || []
+                          });
                           setIsEditModalOpen(true);
                         }}
-                        className="text-gray-400 hover:text-blue-500 p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        className="text-gray-400 hover:text-blue-500 p-1.5 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
                         title="Editar tarea"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => handleDeleteTask(t.id)}
-                        className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
                         title="Eliminar tarea"
                       >
                         <Trash2 size={14} />
@@ -744,9 +882,9 @@ export default function PlanningTab({
                   </td>
                 </tr>
               ))}
-              {sortedTasks.filter(matchesSearch).length === 0 && (
+              {(taskSearch.trim() ? globalTasks : sortedTasks).length === 0 && (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center opacity-30 italic text-xs font-bold text-gray-400 uppercase">
+                  <td colSpan="8" className="py-8 text-center opacity-30 italic text-xs font-bold text-gray-400 uppercase">
                     Sin resultados
                   </td>
                 </tr>
@@ -760,102 +898,319 @@ export default function PlanningTab({
       {/* (MODAL EDITAR) */}
       {isEditModalOpen && editingTask && (
         <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] p-8 max-w-lg w-full animate-in zoom-in-95 shadow-2xl">
+          <div className="bg-white rounded-[32px] p-6 max-w-5xl w-full animate-in zoom-in-95 shadow-2xl overflow-y-auto max-h-[90vh] custom-scrollbar">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-gray-900 uppercase">
-                Editar Tarea
-              </h3>
-              <button onClick={() => setIsEditModalOpen(false)}>
-                <X className="text-gray-400 hover:text-gray-900" />
+              <div>
+                <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tight">
+                  Gestionar Actividad Completa
+                </h3>
+                <p className="text-xs font-bold text-brand uppercase tracking-wider">
+                  Edición Unificada: Planificación + Ejecución
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-900 transition-colors cursor-pointer"
+              >
+                <X size={20} />
               </button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">
-                  Descripción
-                </label>
-                <input
-                  type="text"
-                  className="w-full bg-gray-50 p-3 rounded-xl text-sm font-bold outline-none border focus:border-brand"
-                  value={editingTask.description}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      description: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* COLUMNA IZQUIERDA: Planificación y Subtareas */}
+              <div className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">
-                    Categoría
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Descripción de la Actividad
                   </label>
-                  <select
-                    className="w-full bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none border focus:border-brand uppercase"
-                    value={editingTask.category}
+                  <input
+                    type="text"
+                    className="w-full bg-gray-50 p-3.5 rounded-xl text-sm font-bold outline-none border focus:border-brand text-gray-800"
+                    value={editingTask.description}
                     onChange={(e) =>
                       setEditingTask({
                         ...editingTask,
-                        category: e.target.value,
+                        description: e.target.value,
                       })
                     }
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">
-                    Prioridad
-                  </label>
-                  <div className="flex bg-gray-50 p-1 rounded-xl">
-                    {[1, 2, 3].map((p) => (
-                      <button
-                        key={p}
-                        onClick={() =>
-                          setEditingTask({ ...editingTask, priority: p })
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                      Categoría
+                    </label>
+                    <select
+                      className="w-full bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none border focus:border-brand uppercase text-gray-600"
+                      value={editingTask.category}
+                      onChange={(e) =>
+                        setEditingTask({
+                          ...editingTask,
+                          category: e.target.value,
+                        })
+                      }
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                      Semana Planificada
+                    </label>
+                    <select
+                      className="w-full bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none border focus:border-brand text-gray-600"
+                      value={editingTask.target_week}
+                      onChange={(e) =>
+                        setEditingTask({
+                          ...editingTask,
+                          target_week: parseInt(e.target.value),
+                        })
+                      }
+                    >
+                      {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(
+                        (w) => (
+                          <option key={w} value={w}>
+                            Semana {w}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                      Prioridad
+                    </label>
+                    <div className="flex bg-gray-50 p-1 rounded-xl">
+                      {[1, 2, 3].map((p) => (
+                        <button
+                          key={p}
+                          onClick={() =>
+                            setEditingTask({ ...editingTask, priority: p })
+                          }
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all ${editingTask.priority === p ? "bg-white shadow-sm text-gray-900" : "text-gray-400"}`}
+                        >
+                          P{p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* FECHAS Y TIEMPO (EJECUCIÓN) */}
+                <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100/70 space-y-3">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Fechas y Tiempos de Ejecución
+                  </span>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">
+                        Inicio
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full bg-white p-2 rounded-lg text-xs border border-gray-200 outline-none text-gray-600"
+                        value={editingTask.start_date || ""}
+                        onChange={(e) =>
+                          setEditingTask({
+                            ...editingTask,
+                            start_date: e.target.value || null,
+                          })
                         }
-                        className={`flex-1 py-2 rounded-lg text-[10px] font-black transition-all ${editingTask.priority === p ? "bg-white shadow-sm text-gray-900" : "text-gray-400"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">
+                        Fin
+                      </label>
+                      <input
+                        type="date"
+                        className="w-full bg-white p-2 rounded-lg text-xs border border-gray-200 outline-none text-gray-600"
+                        value={editingTask.end_date || ""}
+                        onChange={(e) =>
+                          setEditingTask({
+                            ...editingTask,
+                            end_date: e.target.value || null,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">
+                        Minutos Estimados
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full bg-white p-2 rounded-lg text-xs border border-gray-200 outline-none text-gray-600"
+                        value={editingTask.estimated_hours || 0}
+                        onChange={(e) =>
+                          setEditingTask({
+                            ...editingTask,
+                            estimated_hours: parseInt(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* PASOS / SUBTAREAS */}
+                <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100/70 space-y-3">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Pasos de Ejecución ({ (editingTask.subtasks || []).length })
+                  </span>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                    {(editingTask.subtasks || []).map((i) => (
+                      <div
+                        key={i.id}
+                        className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-100"
                       >
-                        {p}
-                      </button>
+                        <button
+                          onClick={() => handleModalToggleSubtask(i.id)}
+                          className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${i.completed ? "bg-emerald-500 border-emerald-500 text-white" : "bg-gray-50 text-transparent"}`}
+                        >
+                          <Check size={10} strokeWidth={4} />
+                        </button>
+                        <div className="flex flex-col flex-1 truncate">
+                          <span
+                            className={`text-xs font-semibold truncate ${i.completed ? "text-gray-400 line-through" : "text-gray-700"}`}
+                          >
+                            {i.text}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleModalDeleteSubtask(i.id)}
+                          className="text-gray-300 hover:text-red-500 transition-colors p-1 cursor-pointer"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     ))}
+                    {(editingTask.subtasks || []).length === 0 && (
+                      <p className="text-[10px] italic text-gray-400 text-center py-2">
+                        Sin subtareas agregadas.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="+ Agregar nuevo paso de trabajo..."
+                      className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none text-gray-700"
+                      value={newSubtaskText}
+                      onChange={(e) => setNewSubtaskText(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleModalAddSubtask()}
+                    />
+                    <button
+                      onClick={handleModalAddSubtask}
+                      className="bg-brand text-white px-4 rounded-xl text-xs font-black uppercase hover:bg-black transition-colors cursor-pointer"
+                    >
+                      Añadir
+                    </button>
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase">
-                  Semana
-                </label>
-                <select
-                  className="w-full bg-gray-50 p-3 rounded-xl text-xs font-bold outline-none border focus:border-brand"
-                  value={editingTask.target_week}
-                  onChange={(e) =>
-                    setEditingTask({
-                      ...editingTask,
-                      target_week: parseInt(e.target.value),
-                    })
-                  }
-                >
-                  {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(
-                    (w) => (
-                      <option key={w} value={w}>
-                        Semana {w}
-                      </option>
-                    ),
+
+              {/* COLUMNA DERECHA: Enlaces, Preview y Control de Progreso */}
+              <div className="flex flex-col justify-between space-y-4">
+                {/* LINK Y PREVIEW */}
+                <div className="flex-1 flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">
+                    Enlace de Entregable / Recurso
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      className="flex-1 bg-gray-50 border border-gray-100 p-2.5 rounded-xl text-xs outline-none focus:bg-white focus:border-brand"
+                      placeholder="Ej: https://docs.google.com/..."
+                      value={editingTask.resource_link || ""}
+                      onChange={(e) =>
+                        setEditingTask({
+                          ...editingTask,
+                          resource_link: e.target.value,
+                        })
+                      }
+                    />
+                    {editingTask.resource_link && (
+                      <a
+                        href={editingTask.resource_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-blue-50 text-blue-600 p-2.5 rounded-xl border border-blue-100 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                      >
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                  </div>
+                  {editingTask.resource_link &&
+                    editingTask.resource_link.includes("docs.google.com") ? (
+                    <div className="flex-1 rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-inner relative min-h-[220px] h-60">
+                      <iframe
+                        src={getEmbedUrl(editingTask.resource_link)}
+                        className="w-full h-full"
+                        frameBorder="0"
+                        title="Preview de Documento"
+                      ></iframe>
+                    </div>
+                  ) : (
+                    <div className="flex-1 rounded-2xl border border-dashed border-gray-200 bg-gray-50/50 flex flex-col items-center justify-center text-gray-300 text-[10px] min-h-[220px] h-60 gap-1">
+                      <Layout size={24} />
+                      <span>Sin Preview del Documento</span>
+                    </div>
                   )}
-                </select>
+                </div>
+
+                {/* CONTROL DE AVANCE Y ESTADO */}
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      Progreso de la Actividad
+                    </span>
+                    <span className="text-brand font-black text-3xl">
+                      {editingTask.progress}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    className="w-full h-2.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-brand"
+                    value={editingTask.progress}
+                    onChange={(e) =>
+                      setEditingTask({
+                        ...editingTask,
+                        progress: parseInt(e.target.value),
+                        status: parseInt(e.target.value) >= 100 ? "COMPLETADO" : editingTask.status
+                      })
+                    }
+                  />
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      onClick={() =>
+                        setEditingTask({
+                          ...editingTask,
+                          status: "COMPLETADO",
+                          progress: 100,
+                        })
+                      }
+                      className={`py-3 rounded-xl text-xs font-bold uppercase border transition-all flex items-center justify-center gap-2 cursor-pointer ${editingTask.status === "COMPLETADO" ? "bg-emerald-50 text-emerald-600 border-emerald-200 font-black" : "bg-white text-gray-400 border-gray-200 hover:border-emerald-200 hover:text-emerald-500"}`}
+                    >
+                      <CheckCircle2 size={16} /> Completada
+                    </button>
+                    <button
+                      onClick={handleQuickUpdate}
+                      className="bg-brand text-white py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-black shadow-md transition-all cursor-pointer flex items-center justify-center"
+                    >
+                      Guardar Cambios
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={handleQuickUpdate}
-                className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest hover:bg-black mt-2"
-              >
-                Guardar Cambios
-              </button>
             </div>
           </div>
         </div>
