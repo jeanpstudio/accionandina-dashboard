@@ -499,9 +499,10 @@ export default function Supervision() {
    */
   async function updateProjectStatus(projectId, targetStatus) {
     if (isReadOnly) return;
+    const lowerStatus = (targetStatus || "").toLowerCase();
     const { error } = await supabase
       .from("projects")
-      .update({ status: targetStatus })
+      .update({ status: lowerStatus })
       .eq("id", projectId);
     if (error) {
       alert(error.message);
@@ -1219,30 +1220,9 @@ export default function Supervision() {
                                   </div>
                                 </div>
 
-                                {/* BOTÓN SETTINGS PAISAJE: OCULTO SI ES READONLY */}
                                 <div className="flex items-center gap-1">
                                   {!isReadOnly && (
                                     <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          updateProjectStatus(project.id, "PAUSADO");
-                                        }}
-                                        className="p-1.5 text-gray-300 hover:text-amber-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                        title="Pausar paisaje"
-                                      >
-                                        <PauseCircle size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          updateProjectStatus(project.id, "ACTIVO");
-                                        }}
-                                        className="p-1.5 text-gray-300 hover:text-emerald-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                        title="Reactivar paisaje"
-                                      >
-                                        <PlayCircle size={14} />
-                                      </button>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1253,10 +1233,6 @@ export default function Supervision() {
                                       >
                                         <CheckCircle2 size={14} />
                                       </button>
-                                    </>
-                                  )}
-                                  {!isReadOnly && (
-                                    <>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();

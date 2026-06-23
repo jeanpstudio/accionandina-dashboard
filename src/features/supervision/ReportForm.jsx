@@ -326,10 +326,10 @@ export default function ReportForm({ isViewMode = false }) {
           report_year:
             lastMonthIndex === 11 ? last.report_year + 1 : last.report_year,
           web_progress_percent: last.web_progress_percent || 0,
-          // Solo heredamos URL y porcentaje web — los entregables son por mes
-          campaigns: [], // nuevo mes = lista vacía
-          videos: [],
-          milkywire_material: [],
+          // Heredamos campañas, videos y material Milkywire del mes anterior de la temporada para acumular
+          campaigns: ensureArray(last.campaigns),
+          videos: ensureArray(last.videos),
+          milkywire_material: ensureArray(last.milkywire_material),
           social_links: ensureArray(last.social_links),
           web_url: last.web_url || "",
           video_general_comment: "",
@@ -346,7 +346,28 @@ export default function ReportForm({ isViewMode = false }) {
         } else if (seasonsSnapshot.length > 0) {
           fallback = seasonsSnapshot[seasonsSnapshot.length - 1];
         }
-        setFormData((prev) => ({ ...prev, season_name: fallback }));
+
+        let initMonth = "";
+        let initYear = new Date().getFullYear();
+        let isStart = false;
+
+        if (projData?.start_date) {
+          const dateObj = new Date(projData.start_date + "T12:00:00");
+          if (!isNaN(dateObj.getTime())) {
+            const mIdx = dateObj.getMonth();
+            initMonth = months[mIdx];
+            initYear = dateObj.getFullYear();
+            isStart = true;
+          }
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          season_name: fallback,
+          report_month: initMonth || months[0],
+          report_year: initYear,
+          is_season_start: isStart,
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -719,12 +740,27 @@ export default function ReportForm({ isViewMode = false }) {
                 disabled={isViewMode}
                 onChange={(e) => {
                   const newSeason = e.target.value;
+
+                  let initMonth = months[0];
+                  let initYear = new Date().getFullYear();
+                  let isStart = false;
+
+                  if (project?.start_date) {
+                    const dateObj = new Date(project.start_date + "T12:00:00");
+                    if (!isNaN(dateObj.getTime())) {
+                      initMonth = months[dateObj.getMonth()];
+                      initYear = dateObj.getFullYear();
+                      isStart = true;
+                    }
+                  }
+
                   // Al cambiar de temporada, limpiamos entregables para empezar desde 0
                   setFormData((p) => ({
                     ...p,
                     season_name: newSeason,
                     // Nueva temporada = historial limpio, no hereda del mes anterior
-                    report_month: months[0], // Resetear al mes inicial por defecto
+                    report_month: initMonth,
+                    report_year: initYear,
                     campaigns: [],
                     videos: [],
                     milkywire_material: [],
@@ -741,7 +777,7 @@ export default function ReportForm({ isViewMode = false }) {
                     season_comment: "",
                     video_general_comment: "",
                     milkywire_general_comment: "",
-                    is_season_start: false,
+                    is_season_start: isStart,
                     is_last_month: false,
                   }));
                   // Recargar campañas y reglas de la nueva temporada (con mes vacío inicialmente)

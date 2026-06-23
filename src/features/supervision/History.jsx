@@ -538,11 +538,23 @@ export default function History() {
     const photoStats = calculateMonthlyProgress(r.photo_count, targetPhotos);
     const postStats = calculateMonthlyProgress(r.post_count, targetPosts);
 
-    const seasonReports = reports.filter(
-      (rep) =>
-        rep.season_name === r.season_name &&
-        new Date(rep.created_at) <= new Date(r.created_at),
+    // Filtrar reportes de la misma temporada y ordenarlos cronológicamente (más antiguo a más reciente)
+    const reportsOfThisSeason = reports.filter(
+      (rep) => rep.season_name === r.season_name
     );
+    const sortedSeasonReports = [...reportsOfThisSeason].sort((a, b) => {
+      const yearA = parseInt(a.report_year) || 0;
+      const yearB = parseInt(b.report_year) || 0;
+      if (yearA !== yearB) return yearA - yearB;
+      const monthA = monthMap[normalize(a.report_month)] || 0;
+      const monthB = monthMap[normalize(b.report_month)] || 0;
+      return monthA - monthB;
+    });
+
+    const currentReportIndex = sortedSeasonReports.findIndex((rep) => rep.id === r.id);
+    const seasonReports = currentReportIndex !== -1
+      ? sortedSeasonReports.slice(0, currentReportIndex + 1)
+      : [r];
     const previousReports = seasonReports.filter((rep) => rep.id !== r.id);
 
     const rawTotalProgressPhotos = seasonReports.reduce(
@@ -606,15 +618,48 @@ export default function History() {
       }
     }
 
-    const totalVideos = Array.isArray(r.videos) ? r.videos.length : 0;
-    const totalCamps = Array.isArray(r.campaigns) ? r.campaigns.length : 0;
-    const totalMilky = Array.isArray(r.milkywire_material) ? r.milkywire_material.length : 0;
+    // Colección acumulada de campañas únicas hasta el reporte seleccionado (inclusive)
+    const accumulatedCampaignsMap = new Map();
+    seasonReports.forEach((rep) => {
+      ensureArray(rep.campaigns).forEach((c) => {
+        if (c.title) {
+          accumulatedCampaignsMap.set(c.title.trim().toLowerCase(), c);
+        }
+      });
+    });
+    const accumulatedCampaigns = Array.from(accumulatedCampaignsMap.values());
+
+    // Colección acumulada de videos únicos hasta el reporte seleccionado (inclusive)
+    const accumulatedVideosMap = new Map();
+    seasonReports.forEach((rep) => {
+      ensureArray(rep.videos).forEach((v) => {
+        if (v.topic) {
+          accumulatedVideosMap.set(v.topic.trim().toLowerCase(), v);
+        }
+      });
+    });
+    const accumulatedVideos = Array.from(accumulatedVideosMap.values());
+
+    // Colección acumulada de material Milkywire único hasta el reporte seleccionado (inclusive)
+    const accumulatedMilkyMap = new Map();
+    seasonReports.forEach((rep) => {
+      ensureArray(rep.milkywire_material).forEach((m) => {
+        if (m.topic) {
+          accumulatedMilkyMap.set(m.topic.trim().toLowerCase(), m);
+        }
+      });
+    });
+    const accumulatedMilky = Array.from(accumulatedMilkyMap.values());
+
+    const totalVideos = accumulatedVideos.length;
+    const totalCamps = accumulatedCampaigns.length;
+    const totalMilky = accumulatedMilky.length;
 
     // Verificar si es mes de entrega de video (Junio, Octubre, Marzo)
     const videoMonths = ["Junio", "Octubre", "Marzo"];
     const isVideoMonth = videoMonths.includes(r.report_month);
 
-    // El "isMilkyMonth" en History lo inferimos si hay cometario o si queremos ser precisos 
+    // El "isMilkyMonth" en History lo inferimos si hay comentario o si queremos ser precisos 
     // pero por ahora usemos la presencia de material o comentario
     const hasMilkyJustification = r.milkywire_comment && r.milkywire_comment.trim().length > 0;
     const hasVideoJustification = r.video_comment && r.video_comment.trim().length > 0;
@@ -623,9 +668,9 @@ export default function History() {
       "font-family: Arial, sans-serif; font-size: 13px; color: #374151; line-height: 1.5;";
     const getStatusColor = (isComplete) => (isComplete ? "#065f46" : "#dc2626");
 
-    const campaignItemsHTML = ensureArray(r.campaigns).length > 0
-      ? ensureArray(r.campaigns).map(c => `<li><b>${c.title}:</b> ${c.comment || 'Participación registrada.'}</li>`).join('')
-      : '<li>No se reportaron campañas activas este mes.</li>';
+    const campaignItemsHTML = accumulatedCampaigns.length > 0
+      ? accumulatedCampaigns.map(c => `<li><b>${c.title}:</b> ${c.comment || 'Participación registrada.'}</li>`).join('')
+      : '<li>No se reportaron campañas activas hasta este mes.</li>';
 
     const videoInfoHTML = totalVideos > 0
       ? `<b>${totalVideos} video(s) registrados.</b>`
