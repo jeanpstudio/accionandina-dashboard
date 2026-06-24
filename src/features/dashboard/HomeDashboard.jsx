@@ -16,6 +16,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../app/supabase";
 import { Link } from "react-router-dom";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import {
   CheckCircle,
   Clock,
@@ -106,18 +107,23 @@ export default function HomeDashboard() {
   };
 
   // --- CÁLCULO DE PORCENTAJE REAL ---
-  const calculateProjectProgress = (project) => {
-    if (!project.monthly_reports || project.monthly_reports.length === 0)
+  const calculateProjectProgress = (project, activeSeason) => {
+    const reportsForSeason = (project.monthly_reports || []).filter(
+      (r) => (r.season_name || "").trim() === activeSeason.trim()
+    );
+
+    if (reportsForSeason.length === 0)
       return 0;
 
-    const duration = project.season_duration_months || 12;
-    const targetPhotos = project.monthly_photos_target || 10;
-    const targetPosts = project.monthly_posts_target || 4;
+    const config = getProjectConfigForSeason(project, activeSeason);
+    const duration = config?.season_duration_months || 12;
+    const targetPhotos = config?.monthly_photos_target || 10;
+    const targetPosts = config?.monthly_posts_target || 4;
     const maxMonthWeight = 100 / duration;
 
     let accumulatedPercent = 0;
 
-    project.monthly_reports.forEach((r) => {
+    reportsForSeason.forEach((r) => {
       const photoCompliance = Math.min(
         (parseInt(r.photo_count) || 0) / targetPhotos,
         1,
@@ -193,13 +199,42 @@ export default function HomeDashboard() {
         .select(`
             id, partner_id, name, status, start_date, season_duration_months,
             monthly_photos_target, monthly_posts_target,
-            monthly_reports(id, report_month, report_year, videos, photo_count, post_count)
+            override_season_rules, custom_video_months, custom_campaign_requirements,
+            project_season_configs ( * ),
+            monthly_reports(id, report_month, report_year, videos, photo_count, post_count, season_name)
           `);
 
       if (errProj) {
         console.error("Error proyectos:", errProj);
         setLoading(false);
         return;
+      }
+
+      // Infer active season
+      let activeSeason = "";
+      try {
+        activeSeason = localStorage.getItem("aa_supervision_active_season");
+      } catch {}
+
+      if (!activeSeason) {
+        const seasons = new Set();
+        projects?.forEach((proj) => {
+          proj.monthly_reports?.forEach((r) => {
+            if (r.season_name) seasons.add(r.season_name.trim());
+          });
+        });
+        const sortedSeasons = Array.from(seasons).sort();
+        if (sortedSeasons.length > 0) {
+          activeSeason = sortedSeasons[sortedSeasons.length - 1];
+        } else {
+          const year = new Date().getFullYear();
+          const month = new Date().getMonth();
+          if (month >= 3) {
+            activeSeason = `${year}-${year + 1}`;
+          } else {
+            activeSeason = `${year - 1}-${year}`;
+          }
+        }
       }
 
       // 3. ESTADÍSTICAS
@@ -211,13 +246,18 @@ export default function HomeDashboard() {
 
       safeProjects.forEach((p) => {
         p.monthly_reports?.forEach((r) => {
-          if (r.videos) totalVideos += r.videos.length;
+          if ((r.season_name || "").trim() === activeSeason.trim() && r.videos) {
+            totalVideos += r.videos.length;
+          }
         });
 
-        const realPercent = calculateProjectProgress(p);
+        const realPercent = calculateProjectProgress(p, activeSeason);
         p.calculated_percent = realPercent;
 
-        if (p.status?.toLowerCase() === "activo") {
+        const config = getProjectConfigForSeason(p, activeSeason);
+        const resolvedStatus = config?.status || p.status || "activo";
+
+        if (resolvedStatus.toLowerCase() === "activo") {
           totalExecutionSum += realPercent;
           activeProjsCount++;
         }
@@ -240,9 +280,11 @@ export default function HomeDashboard() {
             (proj) => proj.partner_id === p.id,
           );
           const hasProjects = pProjects.length > 0;
-          const hasActiveProjects = pProjects.some(
-            (proj) => proj.status?.toLowerCase() === "activo",
-          );
+          const hasActiveProjects = pProjects.some((proj) => {
+            const config = getProjectConfigForSeason(proj, activeSeason);
+            const resolvedStatus = config?.status || proj.status || "activo";
+            return resolvedStatus.toLowerCase() === "activo";
+          });
 
           if (!hasProjects) {
             issues.push({
@@ -253,17 +295,24 @@ export default function HomeDashboard() {
             });
           } else {
             pProjects.forEach((proj) => {
-              if (proj.status?.toLowerCase() !== "activo") return;
-              const projStart = proj.start_date
-                ? new Date(proj.start_date)
+              const config = getProjectConfigForSeason(proj, activeSeason);
+              const resolvedStatus = config?.status || proj.status || "activo";
+              if (resolvedStatus.toLowerCase() !== "activo") return;
+
+              const projStart = config.start_date
+                ? new Date(config.start_date)
                 : null;
+
+              const reportsForSeason = (proj.monthly_reports || []).filter(
+                (r) => (r.season_name || "").trim() === activeSeason.trim()
+              );
 
               // A. FALTA CIERRE MES ANTERIOR
               if (
                 projStart &&
                 projStart < new Date(today.getFullYear(), today.getMonth(), 0)
               ) {
-                const hasPrevReport = proj.monthly_reports?.some(
+                const hasPrevReport = reportsForSeason.some(
                   (r) =>
                     r.report_month?.toLowerCase().trim() === prevMonthName &&
                     parseInt(r.report_year) === prevYear,
@@ -281,12 +330,13 @@ export default function HomeDashboard() {
               }
 
               // B. SEMÁFORO DE ATRASO
+              const duration = config?.season_duration_months || 12;
               if (
                 projStart &&
-                proj.season_duration_months &&
-                proj.monthly_reports?.length > 0
+                duration &&
+                reportsForSeason.length > 0
               ) {
-                const sortedReports = [...proj.monthly_reports].sort((a, b) => {
+                const sortedReports = [...reportsForSeason].sort((a, b) => {
                   const dateA = new Date(
                     parseInt(a.report_year),
                     getMonthIndex(a.report_month),
@@ -312,7 +362,7 @@ export default function HomeDashboard() {
 
                 if (monthsPassedAtReport > 0) {
                   let expectedPercent =
-                    (monthsPassedAtReport / proj.season_duration_months) * 100;
+                    (monthsPassedAtReport / duration) * 100;
                   if (expectedPercent > 100) expectedPercent = 100;
                   const actualPercent = proj.calculated_percent || 0;
                   const diff = expectedPercent - actualPercent;
@@ -340,8 +390,7 @@ export default function HomeDashboard() {
               }
 
               // C. PROYECTO INICIADO SIN REPORTES
-              const hasAnyReport =
-                proj.monthly_reports && proj.monthly_reports.length > 0;
+              const hasAnyReport = reportsForSeason.length > 0;
               const daysSinceStart = projStart
                 ? (today - projStart) / (1000 * 60 * 60 * 24)
                 : 0;
@@ -358,7 +407,7 @@ export default function HomeDashboard() {
 
               // D. VIDEOS
               const uploadedVideos =
-                proj.monthly_reports?.reduce(
+                reportsForSeason.reduce(
                   (acc, r) => acc + (r.videos?.length || 0),
                   0,
                 ) || 0;

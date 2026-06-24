@@ -11,8 +11,9 @@
  * - 'custom_campaign_requirements': JSONB array de {title, start_month, end_month}.
  */
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../app/supabase";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import {
   Save,
   ArrowLeft,
@@ -35,6 +36,8 @@ const MONTHS = [
 export default function ProjectForm() {
   const navigate = useNavigate();
   const { partnerId, projectId } = useParams();
+  const [searchParams] = useSearchParams();
+  const seasonParam = searchParams.get("season");
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -61,7 +64,7 @@ export default function ProjectForm() {
       const fetchProject = async () => {
         const { data, error } = await supabase
           .from("projects")
-          .select("*, partners(name)")
+          .select("*, partners(name), project_season_configs(*)")
           .eq("id", projectId)
           .single();
 
@@ -69,21 +72,18 @@ export default function ProjectForm() {
           alert("Error cargando proyecto");
           navigate("/supervision");
         } else {
+          const config = getProjectConfigForSeason(data, seasonParam);
           setFormData({
             name: data.name,
             partner_id: data.partner_id,
             landscape: data.landscape,
-            season_duration_months: data.season_duration_months || 12,
-            monthly_photos_target: data.monthly_photos_target || 10,
-            monthly_posts_target: data.monthly_posts_target || 4,
-            start_date: data.start_date || "",
-            override_season_rules: data.override_season_rules || false,
-            custom_video_months: Array.isArray(data.custom_video_months)
-              ? data.custom_video_months
-              : [],
-            custom_campaign_requirements: Array.isArray(data.custom_campaign_requirements)
-              ? data.custom_campaign_requirements
-              : [],
+            season_duration_months: config.season_duration_months,
+            monthly_photos_target: config.monthly_photos_target,
+            monthly_posts_target: config.monthly_posts_target,
+            start_date: config.start_date || "",
+            override_season_rules: config.override_season_rules,
+            custom_video_months: config.custom_video_months,
+            custom_campaign_requirements: config.custom_campaign_requirements,
           });
           setPartnerName(data.partners?.name);
         }
@@ -91,7 +91,7 @@ export default function ProjectForm() {
       };
       fetchProject();
     }
-  }, [projectId]);
+  }, [projectId, seasonParam]);
 
   // EFECTO 2: SI ES NUEVO, CARGAR NOMBRE DEL SOCIO
   useEffect(() => {
@@ -117,6 +117,7 @@ export default function ProjectForm() {
     console.log("projectId:", projectId);
     console.log("season_duration_months:", formData.season_duration_months);
     console.log("typeof:", typeof formData.season_duration_months);
+    console.log("seasonParam:", seasonParam);
 
     try {
       // Campos base: siempre se guardan (existen en la tabla original)
@@ -128,17 +129,19 @@ export default function ProjectForm() {
         monthly_photos_target: Number(formData.monthly_photos_target),
         monthly_posts_target: Number(formData.monthly_posts_target),
         start_date: formData.start_date || null,
+        override_season_rules: formData.override_season_rules,
+        custom_video_months: formData.custom_video_months,
+        custom_campaign_requirements: formData.custom_campaign_requirements,
       };
 
       console.log("basePayload:", basePayload);
 
-      // Primero intentamos solo con los campos base para garantizar el guardado
       if (isEditing) {
         const { data, error } = await supabase
           .from("projects")
           .update(basePayload)
           .eq("id", projectId)
-          .select(); // <-- importante: retorna la fila actualizada
+          .select();
 
         console.log("Resultado update:", { data, error });
 
@@ -152,16 +155,28 @@ export default function ProjectForm() {
           throw new Error(`No se encontró el proyecto con ID ${projectId}. Puede ser un problema de permisos (RLS) o ID incorrecto.`);
         }
 
-        // Si los campos de override existen, intentamos guardarlos también
-        try {
-          const overridePayload = {
+        // Si tenemos seasonParam, guardamos/actualizamos en project_season_configs
+        if (seasonParam) {
+          const configPayload = {
+            project_id: projectId,
+            season_name: seasonParam,
+            start_date: formData.start_date || null,
+            season_duration_months: Number(formData.season_duration_months),
+            monthly_photos_target: Number(formData.monthly_photos_target),
+            monthly_posts_target: Number(formData.monthly_posts_target),
             override_season_rules: formData.override_season_rules,
             custom_video_months: formData.custom_video_months,
             custom_campaign_requirements: formData.custom_campaign_requirements,
           };
-          await supabase.from("projects").update(overridePayload).eq("id", projectId);
-        } catch (overrideErr) {
-          console.warn("campos override no disponibles todavía (SQL pendiente):", overrideErr);
+
+          const { error: configError } = await supabase
+            .from("project_season_configs")
+            .upsert(configPayload, { onConflict: "project_id,season_name" });
+
+          if (configError) {
+            console.error("Error al guardar config de temporada:", configError);
+            throw new Error("No se pudo guardar la configuración específica de la temporada: " + configError.message);
+          }
         }
 
       } else {
@@ -172,6 +187,29 @@ export default function ProjectForm() {
 
         console.log("Resultado insert:", { data, error });
         if (error) throw error;
+
+        // Si tenemos seasonParam, insertamos en project_season_configs
+        if (seasonParam && data && data.length > 0) {
+          const newProjId = data[0].id;
+          const configPayload = {
+            project_id: newProjId,
+            season_name: seasonParam,
+            start_date: formData.start_date || null,
+            season_duration_months: Number(formData.season_duration_months),
+            monthly_photos_target: Number(formData.monthly_photos_target),
+            monthly_posts_target: Number(formData.monthly_posts_target),
+            override_season_rules: formData.override_season_rules,
+            custom_video_months: formData.custom_video_months,
+            custom_campaign_requirements: formData.custom_campaign_requirements,
+          };
+          const { error: configError } = await supabase
+            .from("project_season_configs")
+            .insert([configPayload]);
+          
+          if (configError) {
+            console.error("Error al crear config de temporada:", configError);
+          }
+        }
       }
 
       alert(

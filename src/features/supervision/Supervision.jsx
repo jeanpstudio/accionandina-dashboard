@@ -21,6 +21,7 @@ import {
   writeMilkywireFeatureEnabled,
   subscribeMilkywireFeatureEnabled,
 } from "../../lib/milkywireFeature";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import {
   Users,
   Settings2,
@@ -333,6 +334,7 @@ export default function Supervision() {
             logo_url, 
             projects (
               *,
+              project_season_configs ( * ),
               monthly_reports (id, report_month, report_year, photo_count, season_name)
             )
           `,
@@ -500,12 +502,53 @@ export default function Supervision() {
   async function updateProjectStatus(projectId, targetStatus) {
     if (isReadOnly) return;
     const lowerStatus = (targetStatus || "").toLowerCase();
-    const { error } = await supabase
+
+    // Query if there is a config for activeSeason
+    const { data: existingConfig } = await supabase
+      .from("project_season_configs")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("season_name", activeSeason)
+      .single();
+
+    let error;
+    if (existingConfig) {
+      const res = await supabase
+        .from("project_season_configs")
+        .update({ status: lowerStatus })
+        .eq("id", existingConfig.id);
+      error = res.error;
+    } else {
+      // Find project object to inherit default values
+      const projectObj = partners
+        .flatMap((p) => p.projects || [])
+        .find((p) => p.id === projectId);
+
+      const res = await supabase
+        .from("project_season_configs")
+        .insert({
+          project_id: projectId,
+          season_name: activeSeason,
+          status: lowerStatus,
+          start_date: projectObj?.start_date || null,
+          season_duration_months: projectObj?.season_duration_months || 12,
+          monthly_photos_target: projectObj?.monthly_photos_target || 10,
+          monthly_posts_target: projectObj?.monthly_posts_target || 4,
+          override_season_rules: projectObj?.override_season_rules || false,
+          custom_video_months: projectObj?.custom_video_months || null,
+          custom_campaign_requirements: projectObj?.custom_campaign_requirements || null,
+        });
+      error = res.error;
+    }
+
+    // Also update base project as backup/fallback
+    const { error: baseError } = await supabase
       .from("projects")
       .update({ status: lowerStatus })
       .eq("id", projectId);
-    if (error) {
-      alert(error.message);
+
+    if (error || baseError) {
+      alert(error?.message || baseError?.message);
       return;
     }
     fetchData();
@@ -528,12 +571,54 @@ export default function Supervision() {
     if (isReadOnly) return;
     const newDuration = (parseInt(currentDuration) || 12) + 1;
     if (!confirm(`¿Extender "${projectName}" 1 mes más? (${currentDuration} → ${newDuration} meses)`)) return;
-    const { error } = await supabase
+
+    // Check if season config exists
+    const { data: existingConfig } = await supabase
+      .from("project_season_configs")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("season_name", activeSeason)
+      .single();
+
+    let error;
+    if (existingConfig) {
+      const res = await supabase
+        .from("project_season_configs")
+        .update({ season_duration_months: newDuration })
+        .eq("id", existingConfig.id);
+      error = res.error;
+    } else {
+      // Find project object to inherit default values
+      const projectObj = partners
+        .flatMap((p) => p.projects || [])
+        .find((p) => p.id === projectId);
+
+      const res = await supabase
+        .from("project_season_configs")
+        .insert({
+          project_id: projectId,
+          season_name: activeSeason,
+          season_duration_months: newDuration,
+          status: projectObj?.status || "activo",
+          start_date: projectObj?.start_date || null,
+          monthly_photos_target: projectObj?.monthly_photos_target || 10,
+          monthly_posts_target: projectObj?.monthly_posts_target || 4,
+          override_season_rules: projectObj?.override_season_rules || false,
+          custom_video_months: projectObj?.custom_video_months || null,
+          custom_campaign_requirements: projectObj?.custom_campaign_requirements || null,
+        });
+      error = res.error;
+    }
+
+    // Also update base project as backup/fallback
+    const { error: baseError } = await supabase
       .from("projects")
       .update({ season_duration_months: newDuration })
       .eq("id", projectId);
-    if (error) alert(error.message);
-    else {
+
+    if (error || baseError) {
+      alert(error?.message || baseError?.message);
+    } else {
       alert(`✅ Proyecto extendido a ${newDuration} meses.`);
       fetchData();
     }
@@ -1187,86 +1272,92 @@ export default function Supervision() {
                             )}
                           </div>
                           <div className="space-y-2">
-                            {partner.projects?.map((project) => (
-                              <div
-                                key={project.id}
-                                className={`flex justify-between items-center p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand/30 transition-all cursor-pointer group/item`}
-                                // --- LÓGICA DE CLIC BLINDADA ---
-                                onClick={() => {
-                                  if (isReadOnly) {
-                                    navigate(
-                                      `/supervision/historial/${project.id}`,
-                                    );
-                                  } else {
-                                    navigate(
-                                      `/supervision/nuevo-reporte/${project.id}`,
-                                    );
-                                  }
-                                }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="p-1.5 bg-white rounded-lg text-gray-300 group-hover/item:text-brand transition-colors">
-                                    <MapPin size={14} />
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-bold text-gray-700 uppercase">
-                                      {project.name}
-                                    </span>
-                                    <span
-                                      className={`text-[8px] font-black uppercase w-fit mt-1 px-1.5 py-0.5 rounded ${getProjectStatusPill(project.status)}`}
-                                    >
-                                      {normalizeProjectStatus(project.status)}
-                                    </span>
-                                  </div>
-                                </div>
+                            {partner.projects?.map((project) => {
+                              const config = getProjectConfigForSeason(project, activeSeason);
+                              const resolvedStatus = config?.status || "activo";
+                              const duration = config?.season_duration_months || 12;
 
-                                <div className="flex items-center gap-1">
-                                  {!isReadOnly && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          updateProjectStatus(project.id, "CERRADO");
-                                        }}
-                                        className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                        title="Cerrar proyecto"
+                              return (
+                                <div
+                                  key={project.id}
+                                  className={`flex justify-between items-center p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-brand/30 transition-all cursor-pointer group/item`}
+                                  // --- LÓGICA DE CLIC BLINDADA ---
+                                  onClick={() => {
+                                    if (isReadOnly) {
+                                      navigate(
+                                        `/supervision/historial/${project.id}`,
+                                      );
+                                    } else {
+                                      navigate(
+                                        `/supervision/nuevo-reporte/${project.id}`,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-1.5 bg-white rounded-lg text-gray-300 group-hover/item:text-brand transition-colors">
+                                      <MapPin size={14} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold text-gray-700 uppercase">
+                                        {project.name}
+                                      </span>
+                                      <span
+                                        className={`text-[8px] font-black uppercase w-fit mt-1 px-1.5 py-0.5 rounded ${getProjectStatusPill(resolvedStatus)}`}
                                       >
-                                        <CheckCircle2 size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          extendProjectByOneMonth(project.id, project.season_duration_months, project.name);
-                                        }}
-                                        className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                        title={`Extender +1 mes (actualmente ${project.season_duration_months || 12} meses)`}
-                                      >
-                                        <CalendarPlus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigate(`/edit-project/${project.id}`);
-                                        }}
-                                        className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
-                                        title="Configurar Paisaje"
-                                      >
-                                        <Settings size={14} />
-                                      </button>
-                                    </>
-                                  )}
-                                  {!isReadOnly && normalizeProjectStatus(project.status) === "CERRADO" && (
-                                    <span className="text-[8px] font-black text-gray-400 uppercase px-1">
-                                      Finalizado
-                                    </span>
-                                  )}
-                                  <ChevronRight
-                                    size={14}
-                                    className="text-gray-300 group-hover/item:text-brand"
-                                  />
+                                        {normalizeProjectStatus(resolvedStatus)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    {!isReadOnly && (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updateProjectStatus(project.id, "CERRADO");
+                                          }}
+                                          className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                          title="Cerrar proyecto"
+                                        >
+                                          <CheckCircle2 size={14} />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            extendProjectByOneMonth(project.id, duration, project.name);
+                                          }}
+                                          className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                          title={`Extender +1 mes (actualmente ${duration} meses)`}
+                                        >
+                                          <CalendarPlus size={14} />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/edit-project/${project.id}?season=${activeSeason}`);
+                                          }}
+                                          className="p-1.5 text-gray-300 hover:text-brand hover:bg-white rounded-lg transition-all opacity-0 group-hover/item:opacity-100"
+                                          title="Configurar Paisaje"
+                                        >
+                                          <Settings size={14} />
+                                        </button>
+                                      </>
+                                    )}
+                                    {!isReadOnly && normalizeProjectStatus(resolvedStatus) === "CERRADO" && (
+                                      <span className="text-[8px] font-black text-gray-400 uppercase px-1">
+                                        Finalizado
+                                      </span>
+                                    )}
+                                    <ChevronRight
+                                      size={14}
+                                      className="text-gray-300 group-hover/item:text-brand"
+                                    />
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                             {partner.projects?.length === 0 && (
                               <p className="text-[10px] text-gray-300 italic">
                                 No hay paisajes registrados.

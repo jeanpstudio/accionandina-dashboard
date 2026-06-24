@@ -18,6 +18,7 @@ import {
   readMilkywireFeatureEnabled,
   subscribeMilkywireFeatureEnabled,
 } from "../../lib/milkywireFeature";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import {
   ArrowLeft,
   Save,
@@ -132,8 +133,10 @@ export default function ReportForm({ isViewMode = false }) {
   ];
 
   const getMonthNumber = (reportMonth, reportYear) => {
-    if (!project?.start_date) return 0;
-    const start = new Date(project.start_date);
+    const config = getProjectConfigForSeason(project, formData.season_name);
+    const resolvedStart = config?.start_date || project?.start_date;
+    if (!resolvedStart) return 0;
+    const start = new Date(resolvedStart);
     // Usamos UTC para evitar problemas de zona horaria con fechas de DB
     const startUTC = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
     
@@ -231,10 +234,10 @@ export default function ReportForm({ isViewMode = false }) {
       // 3. Reglas efectivas de video y campañas:
       // Si el proyecto tiene override manual, usamos esos datos.
       // Si no, consultamos las reglas globales de la temporada.
-      const proj = project; // ya está en estado
-      if (proj?.override_season_rules) {
-        setEffectiveVideoMonths(Array.isArray(proj.custom_video_months) ? proj.custom_video_months : []);
-        setEffectiveCampaignRules(Array.isArray(proj.custom_campaign_requirements) ? proj.custom_campaign_requirements : []);
+      const config = getProjectConfigForSeason(project, season.trim());
+      if (config?.override_season_rules) {
+        setEffectiveVideoMonths(Array.isArray(config.custom_video_months) ? config.custom_video_months : []);
+        setEffectiveCampaignRules(Array.isArray(config.custom_campaign_requirements) ? config.custom_campaign_requirements : []);
       } else {
         // Cargar video_months desde season_registry
         const { data: reg } = await supabase
@@ -281,7 +284,7 @@ export default function ReportForm({ isViewMode = false }) {
     try {
       const { data: projData } = await supabase
         .from("projects")
-        .select("*, partners(name, id)")
+        .select("*, partners(name, id), project_season_configs(*)")
         .eq("id", projectId)
         .single();
       setProject(projData);
@@ -351,12 +354,27 @@ export default function ReportForm({ isViewMode = false }) {
         let initYear = new Date().getFullYear();
         let isStart = false;
 
-        if (projData?.start_date) {
-          const dateObj = new Date(projData.start_date + "T12:00:00");
+        const config = getProjectConfigForSeason(projData, fallback);
+        const resolvedStart = config?.start_date || projData?.start_date;
+        if (resolvedStart) {
+          const dateObj = new Date(resolvedStart + "T12:00:00");
           if (!isNaN(dateObj.getTime())) {
             const mIdx = dateObj.getMonth();
             initMonth = months[mIdx];
-            initYear = dateObj.getFullYear();
+            
+            // Ajustar el año del primer reporte para que coincida con la temporada elegida (ej: "2026-2027")
+            if (fallback && /^\d{4}-\d{4}$/.test(fallback)) {
+              const [yearStartStr, yearEndStr] = fallback.split("-");
+              const yearStart = parseInt(yearStartStr);
+              const yearEnd = parseInt(yearEndStr);
+              if (mIdx < 3) {
+                initYear = yearEnd;
+              } else {
+                initYear = yearStart;
+              }
+            } else {
+              initYear = dateObj.getFullYear();
+            }
             isStart = true;
           }
         }
@@ -384,7 +402,7 @@ export default function ReportForm({ isViewMode = false }) {
     try {
       const { data: projData } = await supabase
         .from("projects")
-        .select("*, partners(name, id)")
+        .select("*, partners(name, id), project_season_configs(*)")
         .eq("id", projectId)
         .single();
       setProject(projData);
@@ -522,7 +540,8 @@ export default function ReportForm({ isViewMode = false }) {
       
       // Validación de Límite de Meses (Nuevo)
       const currentMonthNumber = getMonthNumber(formData.report_month, formData.report_year);
-      const maxMonths = project?.season_duration_months || 12;
+      const config = getProjectConfigForSeason(project, formData.season_name);
+      const maxMonths = config?.season_duration_months || 12;
       
       if (currentMonthNumber > maxMonths) {
         throw new Error(`⚠️ Límite Excedido: Este proyecto está configurado para ${maxMonths} meses. El reporte de ${formData.report_month} ${formData.report_year} corresponde al mes ${currentMonthNumber}, lo cual supera el límite. Por favor ajusta la configuración del proyecto o corrige la fecha del reporte.`);

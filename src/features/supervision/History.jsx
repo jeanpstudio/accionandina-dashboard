@@ -18,6 +18,7 @@ import {
   readMilkywireFeatureEnabled,
   subscribeMilkywireFeatureEnabled,
 } from "../../lib/milkywireFeature";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import * as XLSX from "xlsx";
 import {
   ArrowLeft,
@@ -131,7 +132,7 @@ export default function History() {
     try {
       const { data: projData } = await supabase
         .from("projects")
-        .select("*, partners(name)")
+        .select("*, partners(name), project_season_configs(*)")
         .eq("id", projectId)
         .single();
       setProject(projData);
@@ -198,12 +199,39 @@ export default function History() {
   const normalize = (str) => (str ? str.toString().toLowerCase().trim() : "");
 
   // --- HELPERS DE CÁLCULO ---
+  const getAdjustedStartDate = (project, seasonName) => {
+    const config = getProjectConfigForSeason(project, seasonName);
+    const resolvedStart = config?.start_date || project?.start_date;
+    if (!resolvedStart) return null;
+    const d = new Date(resolvedStart + "T12:00:00");
+    if (isNaN(d.getTime())) return null;
+    
+    let year = d.getFullYear();
+    const mIdx = d.getMonth();
+    
+    if (seasonName && seasonName !== "TODAS" && /^\d{4}-\d{4}$/.test(seasonName)) {
+      const [yearStartStr, yearEndStr] = seasonName.split("-");
+      const yearStart = parseInt(yearStartStr);
+      const yearEnd = parseInt(yearEndStr);
+      
+      if (mIdx < 3) {
+        year = yearEnd;
+      } else {
+        year = yearStart;
+      }
+    }
+    
+    return new Date(year, mIdx, d.getDate());
+  };
+
   const getTimeProgressAtReport = (report) => {
-    if (!project?.season_duration_months) return 0;
+    const config = getProjectConfigForSeason(project, report.season_name);
+    const duration = parseInt(config?.season_duration_months || 12);
+    if (!duration) return 0;
     let startDate;
-    if (project.start_date) {
-      const d = new Date(project.start_date);
-      startDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const adjustedStart = getAdjustedStartDate(project, report.season_name);
+    if (adjustedStart) {
+      startDate = adjustedStart;
     } else {
       const startReport = reports.find(
         (r) => r.is_season_start && r.season_name === report.season_name,
@@ -230,7 +258,6 @@ export default function History() {
       (reportDate.getMonth() - startDate.getMonth()) +
       1;
     if (isNaN(monthsPassed) || monthsPassed < 1) monthsPassed = 1;
-    const duration = parseInt(project.season_duration_months);
     return Math.min((monthsPassed / duration) * 100, 100);
   };
 
@@ -268,8 +295,9 @@ export default function History() {
     return { color: "text-gray-400", hex: "#9ca3af", label: "PENDIENTE" };
   };
 
-  const calculateMonthlyProgress = (currentValue, targetValue) => {
-    const seasonMonths = project?.season_duration_months || 12;
+  const calculateMonthlyProgress = (currentValue, targetValue, reportSeason) => {
+    const config = getProjectConfigForSeason(project, reportSeason);
+    const seasonMonths = config?.season_duration_months || 12;
     const maxMonthWeight = 100 / seasonMonths;
     const target = targetValue || 1;
     const compliance = Math.min(currentValue / target, 1);
@@ -287,18 +315,21 @@ export default function History() {
     let totalPosts = 0;
     let accPhotoPercent = 0;
     let accPostPercent = 0;
-    const targetPhotos = project?.monthly_photos_target || 10;
-    const targetPosts = project?.monthly_posts_target || 4;
+    const config = getProjectConfigForSeason(project, activeSeason);
+    const targetPhotos = config?.monthly_photos_target || 10;
+    const targetPosts = config?.monthly_posts_target || 4;
     filteredReports.forEach((r) => {
       totalPhotos += parseInt(r.photo_count) || 0;
       totalPosts += parseInt(r.post_count) || 0;
       accPhotoPercent += calculateMonthlyProgress(
         r.photo_count,
         targetPhotos,
+        r.season_name,
       ).gainedNumber;
       accPostPercent += calculateMonthlyProgress(
         r.post_count,
         targetPosts,
+        r.season_name,
       ).gainedNumber;
     });
     // Totales de campañas y videos de la temporada
@@ -328,12 +359,14 @@ export default function History() {
   const seasonStats = calculateSeasonStats();
 
   const getHealthData = () => {
-    if (!project?.season_duration_months || filteredReports.length === 0)
+    const config = getProjectConfigForSeason(project, activeSeason);
+    const duration = config?.season_duration_months || 12;
+    if (!duration || filteredReports.length === 0)
       return { color: "text-gray-300", msg: "", expected: 0 };
     let startDate;
-    if (project.start_date) {
-      const d = new Date(project.start_date);
-      startDate = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const adjustedStart = getAdjustedStartDate(project, activeSeason);
+    if (adjustedStart) {
+      startDate = adjustedStart;
     } else {
       const startReport = filteredReports.find((r) => r.is_season_start);
       if (startReport && startReport.report_month) {
@@ -371,7 +404,6 @@ export default function History() {
       (endDate.getMonth() - startDate.getMonth()) +
       1;
     if (isNaN(monthsPassed) || monthsPassed < 1) monthsPassed = 1;
-    const duration = parseInt(project.season_duration_months) || 12;
     let expectedPercent = (monthsPassed / duration) * 100;
     if (expectedPercent > 100) expectedPercent = 100;
     const diff = parseFloat(seasonStats.accumulatedPercent) - expectedPercent;
@@ -532,11 +564,12 @@ export default function History() {
     const r = selectedMonthForReport || filteredReports[0];
     if (!r) return "";
 
-    const targetPhotos = project?.monthly_photos_target || 10;
-    const targetPosts = project?.monthly_posts_target || 4;
+    const config = getProjectConfigForSeason(project, r.season_name);
+    const targetPhotos = config?.monthly_photos_target || 10;
+    const targetPosts = config?.monthly_posts_target || 4;
 
-    const photoStats = calculateMonthlyProgress(r.photo_count, targetPhotos);
-    const postStats = calculateMonthlyProgress(r.post_count, targetPosts);
+    const photoStats = calculateMonthlyProgress(r.photo_count, targetPhotos, r.season_name);
+    const postStats = calculateMonthlyProgress(r.post_count, targetPosts, r.season_name);
 
     // Filtrar reportes de la misma temporada y ordenarlos cronológicamente (más antiguo a más reciente)
     const reportsOfThisSeason = reports.filter(
@@ -560,13 +593,13 @@ export default function History() {
     const rawTotalProgressPhotos = seasonReports.reduce(
       (acc, rep) =>
         acc +
-        calculateMonthlyProgress(rep.photo_count, targetPhotos).gainedNumber,
+        calculateMonthlyProgress(rep.photo_count, targetPhotos, rep.season_name).gainedNumber,
       0,
     );
     const rawTotalProgressPosts = seasonReports.reduce(
       (acc, rep) =>
         acc +
-        calculateMonthlyProgress(rep.post_count, targetPosts).gainedNumber,
+        calculateMonthlyProgress(rep.post_count, targetPosts, rep.season_name).gainedNumber,
       0,
     );
 
@@ -579,18 +612,25 @@ export default function History() {
     let photosColor = "#065f46";
     let postsColor = "#065f46";
 
-    if (project?.season_duration_months) {
+    const duration = parseInt(config?.season_duration_months || 12);
+    if (duration) {
       const startReport = reports.find(
         (rep) => rep.is_season_start && rep.season_name === r.season_name,
       );
       let startDate;
-      if (startReport) {
+      const adjustedStart = getAdjustedStartDate(project, r.season_name);
+      if (adjustedStart) {
+        startDate = adjustedStart;
+      } else if (startReport) {
         const mIdx = monthMap[normalize(startReport.report_month)];
         if (mIdx !== undefined)
           startDate = new Date(parseInt(startReport.report_year), mIdx, 1);
         else startDate = new Date(startReport.created_at);
-      } else if (project.season_start_date) {
-        startDate = new Date(project.season_start_date);
+      } else {
+        const resolvedStart = config?.start_date || project?.start_date;
+        if (resolvedStart) {
+          startDate = new Date(resolvedStart);
+        }
       }
       if (startDate) {
         const mIdx = monthMap[normalize(r.report_month)];
@@ -603,7 +643,6 @@ export default function History() {
           (reportDate.getMonth() - startDate.getMonth()) +
           1;
         if (isNaN(monthsPassed) || monthsPassed < 1) monthsPassed = 1;
-        const duration = parseInt(project.season_duration_months);
         let expected = (monthsPassed / duration) * 100;
         if (expected > 100) expected = 100;
 
@@ -785,10 +824,10 @@ export default function History() {
           </p>
           <div className="flex gap-4 mt-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
             <span className="bg-gray-50 px-3 py-1 rounded-full">
-              Duración: {project?.season_duration_months || 12} Meses
+              Duración: {getProjectConfigForSeason(project, selectedSeason !== "TODAS" ? selectedSeason : activeSeason)?.season_duration_months || 12} Meses
             </span>
             <span className="bg-gray-50 px-3 py-1 rounded-full">
-              Meta Fotos: {project?.monthly_photos_target || 10}/mes
+              Meta Fotos: {getProjectConfigForSeason(project, selectedSeason !== "TODAS" ? selectedSeason : activeSeason)?.monthly_photos_target || 10}/mes
             </span>
           </div>
         </div>
@@ -994,13 +1033,16 @@ export default function History() {
 
       <div className="space-y-4">
         {filteredReports.map((report) => {
+          const reportConfig = getProjectConfigForSeason(project, report.season_name);
           const photoStats = calculateMonthlyProgress(
             report.photo_count,
-            project?.monthly_photos_target || 10,
+            reportConfig?.monthly_photos_target || 10,
+            report.season_name,
           );
           const postStats = calculateMonthlyProgress(
             report.post_count,
-            project?.monthly_posts_target || 4,
+            reportConfig?.monthly_posts_target || 4,
+            report.season_name,
           );
           const webStatus = getWebStatus(report);
           const videoStatus = getVideoStatus(report);

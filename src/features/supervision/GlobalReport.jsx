@@ -13,6 +13,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../../app/supabase";
+import { getProjectConfigForSeason } from "../../lib/projectConfig";
 import {
   ArrowLeft,
   Download,
@@ -117,9 +118,11 @@ export default function GlobalReport() {
     try {
       const { data, error } = await supabase.from("projects").select(`
           id, name, status, start_date, season_duration_months, monthly_photos_target, monthly_posts_target,
+          override_season_rules, custom_video_months, custom_campaign_requirements,
+          project_season_configs ( * ),
           partners ( id, name, logo_url ),
           monthly_reports (
-            photo_count, post_count, videos, campaigns, report_month, report_year
+            photo_count, post_count, videos, campaigns, report_month, report_year, season_name
           )
         `);
 
@@ -140,8 +143,22 @@ export default function GlobalReport() {
     const today = new Date();
     const currentYear = today.getFullYear();
 
-    // 1. Filtrar reportes según vista
+    // Determine the active season for configuration lookup
+    const seasonToUse = selectedSeason !== "TODAS" ? selectedSeason : (proj.monthly_reports?.[0]?.season_name || "");
+    const config = getProjectConfigForSeason(proj, seasonToUse);
+    const resolvedStatus = config?.status || proj.status || "activo";
+    const resolvedStartDate = config?.start_date || proj.start_date;
+    const resolvedDuration = config?.season_duration_months || 12;
+    const resolvedPhotosTarget = config?.monthly_photos_target || 10;
+    const resolvedPostsTarget = config?.monthly_posts_target || 4;
+
+    // 1. Filtrar reportes según vista y temporada seleccionada
     let relevantReports = proj.monthly_reports || [];
+    if (selectedSeason !== "TODAS") {
+      relevantReports = relevantReports.filter(
+        (r) => (r.season_name || "").trim() === selectedSeason.trim()
+      );
+    }
     if (viewMode === "PERIOD" && selectedPeriodIdx > 0) {
       const currentPeriod = periods[selectedPeriodIdx];
       relevantReports = relevantReports.filter((r) =>
@@ -150,7 +167,7 @@ export default function GlobalReport() {
     }
 
     // 2. Ordenar reportes (Más reciente primero)
-    const sortedReports = [...(proj.monthly_reports || [])].sort((a, b) => {
+    const sortedReports = [...relevantReports].sort((a, b) => {
       const dateA = new Date(
         parseInt(a.report_year),
         getMonthIndex(a.report_month),
@@ -178,15 +195,34 @@ export default function GlobalReport() {
 
     const realPercent = calculateScore(
       relevantReports,
-      proj.season_duration_months,
-      proj.monthly_photos_target,
-      proj.monthly_posts_target,
+      resolvedDuration,
+      resolvedPhotosTarget,
+      resolvedPostsTarget,
     );
 
     // --- CORRECCIÓN LÓGICA: META ESPERADA ---
-    const d = proj.start_date ? new Date(proj.start_date) : null;
-    const projStart = d ? new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) : null;
-    const duration = proj.season_duration_months || 12;
+    let projStart = null;
+    if (resolvedStartDate) {
+      const d = new Date(resolvedStartDate + "T12:00:00");
+      if (!isNaN(d.getTime())) {
+        let year = d.getFullYear();
+        const mIdx = d.getMonth();
+        // Obtener la temporada relevante para ajustar el año del inicio
+        const seasonToUseForYear = selectedSeason !== "TODAS" ? selectedSeason : lastReport?.season_name;
+        if (seasonToUseForYear && /^\d{4}-\d{4}$/.test(seasonToUseForYear)) {
+          const [yearStartStr, yearEndStr] = seasonToUseForYear.split("-");
+          const yearStart = parseInt(yearStartStr);
+          const yearEnd = parseInt(yearEndStr);
+          if (mIdx < 3) {
+            year = yearEnd;
+          } else {
+            year = yearStart;
+          }
+        }
+        projStart = new Date(year, mIdx, d.getDate());
+      }
+    }
+    const duration = resolvedDuration;
     let expectedPercent = 0;
     let monthsPassed = 0;
 
@@ -256,6 +292,7 @@ export default function GlobalReport() {
 
     return {
       ...proj,
+      status: resolvedStatus,
       realPercent,
       expectedPercent: parseFloat(expectedPercent.toFixed(1)),
       totalPhotos,

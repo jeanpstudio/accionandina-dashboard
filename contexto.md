@@ -174,6 +174,19 @@ Es el núcleo técnico de cumplimiento para las metas de comunicaciones.
 *   `partner_id` (uuid, FK -> `partners.id`)
 *   `target_month` (text)
 
+### Configuración de Paisaje por Temporada (`project_season_configs`)
+*   `id` (uuid, PK)
+*   `project_id` (uuid, FK -> `projects.id`)
+*   `season_name` (text) -> Ej: "2025-2026"
+*   `start_date` (date) -> Fecha de inicio en esta temporada
+*   `season_duration_months` (integer) -> Duración en meses para esta temporada
+*   `monthly_photos_target` (integer) -> Meta mensual de fotos
+*   `monthly_posts_target` (integer) -> Meta mensual de posts
+*   `override_season_rules` (boolean) -> Si tiene reglas personalizadas
+*   `custom_video_months` (jsonb) -> Meses de video personalizados
+*   `custom_campaign_requirements` (jsonb) -> Campañas personalizadas
+*   `status` (text) -> Estado en esta temporada ('activo', 'pausado', 'cerrado')
+
 ---
 
 ## 6. Historial de Cambios y Mejoras del Proyecto
@@ -192,3 +205,10 @@ Es el núcleo técnico de cumplimiento para las metas de comunicaciones.
 ### [2026-06-23] Simplificación de Botones y Auto-Selección del Primer Reporte
 *   **Supervision.jsx**: Se eliminaron los botones redundantes de "Pausar" y "Reactivar/Continuar" del paisaje. Se mantuvieron consolidados bajo el mismo bloque de seguridad únicamente los botones de "Cerrar Proyecto" (cambia estado a `'cerrado'`), "Extender un mes más" y "Configurar Paisaje".
 *   **ReportForm.jsx**: Modificado `fetchInitialDataForNew` y el controlador `onChange` de temporadas para que, en caso de no existir reportes previos en la temporada seleccionada (es decir, al crear el primer reporte del paisaje), se auto-seleccionen el mes y año de inicio basados en `start_date` del proyecto, y se active por defecto la bandera de inicio de temporada (`is_season_start = true`). Esto sincroniza el cronograma y mantiene consistentes las métricas y los porcentajes acumulados del paisaje.
+
+### [2026-06-24] Configuración de Proyecto por Temporada
+*   **Base de datos**: Creada la tabla `project_season_configs` para guardar `start_date`, `season_duration_months`, `monthly_photos_target`, `monthly_posts_target`, `override_season_rules`, `custom_video_months`, `custom_campaign_requirements` y `status` por proyecto y temporada de forma única.
+*   **projectConfig.js**: Añadido helper centralizado `getProjectConfigForSeason` para resolver los parámetros vigentes de un paisaje en una temporada dada, cayendo en cascada hacia las columnas globales de `projects` como valor predeterminado si no hay configuración específica aún.
+*   **Supervision.jsx**: Modificada la carga de datos para incluir la configuración de temporada. Los botones "Cerrar" y "Extender" ahora persisten en `project_season_configs`. La navegación a "Configurar" pasa el parámetro `season`.
+*   **ProjectForm.jsx**: Ahora lee el parámetro `season` y carga los campos basándose en el registro específico de la temporada. Guarda/Actualiza los campos correspondientes en `project_season_configs`.
+*   **ReportForm.jsx, History.jsx, GlobalReport.jsx y HomeDashboard.jsx**: Modificados para resolver las metas, duraciones, reglas y estados de salud usando el helper de configuración por temporada activa. La pantalla de inicio ahora calcula el avance usando solo reportes y parámetros de la temporada activa.
