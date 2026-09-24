@@ -36,6 +36,22 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+const VIDEO_QUALITY_OPTIONS = [
+  "Óptima",
+  "Buena",
+  "Regular",
+  "Mala",
+  "Sin evaluar",
+];
+
+const VIDEO_DURATION_OPTIONS = [
+  "1-3 min",
+  "< 1 min",
+  "> 3 min",
+  "No cumple",
+  "N/A",
+];
+
 /**
  * COMPONENTE: ReportForm
  * ---------------------
@@ -61,7 +77,12 @@ export default function ReportForm({ isViewMode = false }) {
   // --- ESTADOS TEMPORALES (Buffers para inputs de listas) ---
   const [currentLink, setCurrentLink] = useState("");
   const [tempCamp, setTempCamp] = useState({ title: "", comment: "" });
-  const [tempVideo, setTempVideo] = useState({ topic: "", comment: "" });
+  const [tempVideo, setTempVideo] = useState({
+    topic: "",
+    comment: "",
+    calidad: "Óptima",
+    duracion: "1-3 min",
+  });
   const [tempMilky, setTempMilky] = useState({ topic: "", comment: "" });
   const [showWebPreview, setShowWebPreview] = useState(false);
   const [previewSocialUrl, setPreviewSocialUrl] = useState(null);
@@ -466,9 +487,6 @@ export default function ReportForm({ isViewMode = false }) {
     }
   };
 
-  /**
-   * addItem: Añade un nuevo item (Video/Campaña/Milkywire) a su respectiva lista JSONB.
-   */
   const addItem = (type, tempValue, setTempFn, mainField) => {
     if (!tempValue[mainField]?.trim()) return;
     const newItem = { 
@@ -479,7 +497,11 @@ export default function ReportForm({ isViewMode = false }) {
       ...prev,
       [type]: [...ensureArray(prev[type]), newItem],
     }));
-    setTempFn({ [mainField]: "", comment: "" });
+    if (type === "videos") {
+      setTempFn({ topic: "", comment: "", calidad: "Óptima", duracion: "1-3 min" });
+    } else {
+      setTempFn({ [mainField]: "", comment: "" });
+    }
   };
 
   /**
@@ -1344,6 +1366,48 @@ export default function ReportForm({ isViewMode = false }) {
                         }))
                       }
                     />
+                    {sec.id === "videos" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                            Calidad del Video
+                          </label>
+                          <select
+                            value={sec.temp.calidad || "Óptima"}
+                            disabled={isViewMode}
+                            onChange={(e) =>
+                              sec.setTemp((p) => ({ ...p, calidad: e.target.value }))
+                            }
+                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm outline-brand text-gray-700 cursor-pointer"
+                          >
+                            {VIDEO_QUALITY_OPTIONS.map((q) => (
+                              <option key={q} value={q}>
+                                {q}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                            Duración / Tiempo
+                          </label>
+                          <select
+                            value={sec.temp.duracion || "1-3 min"}
+                            disabled={isViewMode}
+                            onChange={(e) =>
+                              sec.setTemp((p) => ({ ...p, duracion: e.target.value }))
+                            }
+                            className="w-full bg-white border-none rounded-xl p-3 text-xs font-bold shadow-sm outline-brand text-gray-700 cursor-pointer"
+                          >
+                            {VIDEO_DURATION_OPTIONS.map((d) => (
+                              <option key={d} value={d}>
+                                {d}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
                     {!isViewMode && (
                       <button
                         type="button"
@@ -1382,7 +1446,41 @@ export default function ReportForm({ isViewMode = false }) {
                                 />
                               )}
                             </div>
-                            <div className="p-3 bg-white">
+                            <div className="p-3 bg-white space-y-2">
+                              {sec.id === "videos" && (
+                                <div className="grid grid-cols-2 gap-2 p-2 bg-gray-50/80 rounded-lg border border-gray-100">
+                                  <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase block mb-0.5">
+                                      Calidad:
+                                    </label>
+                                    <select
+                                      value={item.calidad || "Óptima"}
+                                      disabled={isViewMode}
+                                      onChange={(e) => updateGenericField(sec.id, idx, "calidad", e.target.value)}
+                                      className="w-full bg-white border border-gray-200 rounded p-1 text-[10px] font-bold text-gray-700 outline-none cursor-pointer"
+                                    >
+                                      {VIDEO_QUALITY_OPTIONS.map((q) => (
+                                        <option key={q} value={q}>{q}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase block mb-0.5">
+                                      Duración:
+                                    </label>
+                                    <select
+                                      value={item.duracion || "1-3 min"}
+                                      disabled={isViewMode}
+                                      onChange={(e) => updateGenericField(sec.id, idx, "duracion", e.target.value)}
+                                      className="w-full bg-white border border-gray-200 rounded p-1 text-[10px] font-bold text-gray-700 outline-none cursor-pointer"
+                                    >
+                                      {VIDEO_DURATION_OPTIONS.map((d) => (
+                                        <option key={d} value={d}>{d}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
                               <textarea
                                 placeholder="Añadir links de respaldo, descripción o notas..."
                                 className="w-full bg-gray-50 border-none rounded-lg p-2 text-[11px] italic font-medium outline-none text-gray-600 min-h-[50px] resize-none"

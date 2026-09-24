@@ -222,12 +222,28 @@ export default function DeliveredVideosReportModal({
           ? savedEval.subido 
           : (autoDelivered ? "si" : "no");
 
-        const calidad = savedEval.calidad || (subidoStatus === "si" ? "Óptima" : "Sin evaluar");
-        const duracion = savedEval.duracion || (subidoStatus === "si" ? "1-3 min" : "N/A");
-        
-        // Cargar observación guardada o el comentario del video si existe
-        const videoEntry = uniqueVideos[vIdx];
-        const defaultObs = videoEntry ? (videoEntry.comment || videoEntry.topic || "") : "";
+        // Intentar obtener el videoEntry correspondiente:
+        // 1. Del reporte del mes específico mName
+        // 2. O del array acumulado uniqueVideos por índice vIdx
+        let videoEntry = reports.find(r => normalize(r.report_month) === normalize(mName))?.videos?.[0];
+        if (!videoEntry && uniqueVideos[vIdx]) {
+          videoEntry = uniqueVideos[vIdx];
+        }
+
+        const defaultCalidad = (videoEntry && typeof videoEntry === "object" && videoEntry.calidad)
+          ? videoEntry.calidad
+          : (subidoStatus === "si" ? "Óptima" : "Sin evaluar");
+
+        const defaultDuracion = (videoEntry && typeof videoEntry === "object" && videoEntry.duracion)
+          ? videoEntry.duracion
+          : (subidoStatus === "si" ? "1-3 min" : "N/A");
+
+        const defaultObs = videoEntry 
+          ? (typeof videoEntry === "string" ? videoEntry : (videoEntry.comment || videoEntry.topic || "")) 
+          : "";
+
+        const calidad = savedEval.calidad || defaultCalidad;
+        const duracion = savedEval.duracion || defaultDuracion;
         const obs = savedEval.obs !== undefined ? savedEval.obs : defaultObs;
 
         return {

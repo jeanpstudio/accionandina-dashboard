@@ -219,3 +219,8 @@ Es el núcleo técnico de cumplimiento para las metas de comunicaciones.
 
 ### [2026-07-21] Corrección de Políticas RLS para la Creación de Paisajes
 *   **Base de datos**: Creada la migración `20260721211000_fix_projects_rls_policies.sql` para actualizar las políticas de seguridad (RLS) en la tabla `projects`. Esto corrige el error "new row violates row-level security policy for table 'projects'" que impedía a los usuarios editores con `edit_supervision = true` agregar paisajes a socios creados recientemente. Ahora, tanto administradores como editores de supervisión tienen permisos completos de inserción, actualización y eliminación.
+
+### [2026-09-24] Integración de Calidad y Duración de Videos de Temporada
+*   **ReportForm.jsx**: Añadidos selectores de Calidad (*Óptima, Buena, Regular, Mala, Sin evaluar*) y Duración (*1-3 min, < 1 min, > 3 min, No cumple, N/A*) al registrar videos manualmente de temporada y en las tarjetas de videos ya registrados dentro del reporte.
+*   **DeliveredVideosReportModal.jsx**: Actualizada la lógica de extracción para que el cuadro consolidado de videos de temporada jale automáticamente los campos de calidad, duración y observaciones guardados en los reportes mensuales de cada mes de corte, manteniendo las anulaciones manuales si existen.
+
