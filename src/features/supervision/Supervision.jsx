@@ -56,7 +56,9 @@ import {
   Copy,
   Eraser,
   CalendarPlus,
+  AlertTriangle,
 } from "lucide-react";
+import MissingDeliverablesReportModal from "./MissingDeliverablesReportModal";
 
 /**
  * COMPONENTE: Supervision
@@ -105,6 +107,7 @@ export default function Supervision() {
 
   // --- CONFIGURACIÓN GLOBAL DE TEMPORADA (ADMIN ONLY) ---
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isMissingModalOpen, setIsMissingModalOpen] = useState(false);
   /** Temporada activa: solo valores que existen en BD (sin lista hardcodeada). */
   const [activeSeason, setActiveSeason] = useState("");
   const [availableSeasons, setAvailableSeasons] = useState([]);
@@ -1065,6 +1068,13 @@ export default function Supervision() {
           )}
 
           <button
+            onClick={() => setIsMissingModalOpen(true)}
+            className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3 rounded-2xl font-black hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
+          >
+            <AlertTriangle size={16} className="text-amber-600" /> Resumen de Faltantes
+          </button>
+
+          <button
             onClick={() => navigate("/global-report")}
             className="bg-white border border-gray-200 text-gray-600 px-5 py-3 rounded-2xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
           >
@@ -1908,6 +1918,16 @@ export default function Supervision() {
           </div>
         </div>
       )}
+
+      {/* MODAL DE RESUMEN DE FALTANTES Y ACUERDOS */}
+      <MissingDeliverablesReportModal
+        isOpen={isMissingModalOpen}
+        onClose={() => setIsMissingModalOpen(false)}
+        partners={partners}
+        availableSeasons={availableSeasons}
+        activeSeason={activeSeason}
+        seasonCampaigns={seasonCampaigns}
+      />
     </div>
   );
 }
