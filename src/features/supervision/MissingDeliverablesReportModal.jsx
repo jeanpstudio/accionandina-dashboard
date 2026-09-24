@@ -3,20 +3,20 @@
  * -------------------------------------------
  * Modal / Vista consolidada de reporte de faltantes y acuerdos por socio.
  * 
- * LÓGICA DE NEGOCIO ALINEADA EXACTAMENTE CON HISTORIAL (History.jsx):
- * 1. CÁLCULO DE PORCENTAJES:
- *    - Usa la misma fórmula matemática que History.jsx (accumulatedPercent, accPhotoPercent, accPostPercent).
- *    - Evalúa la contribución de cada mes cumplido respecto a la duración de la temporada (ej. 100/12 = 8.33% por mes cumplido).
- * 2. DETALLE AUTOMÁTICO DE FALTANTES:
- *    - Revisa los meses transcurridos hasta el mes de corte.
- *    - Detecta déficit real de fotos (photo_count), posts (post_count), videos e hitos de campaña.
- * 3. ACUERDOS CON EL SOCIO:
- *    - Columna editable guardada en localStorage por proyecto y temporada.
+ * LÓGICA DE NEGOCIO Y MEJORAS:
+ * 1. SELECCIÓN / FILTRADO DE SOCIOS:
+ *    - Casillas de verificación (checkboxes) por proyecto para incluir / excluir socios del reporte.
+ *    - Botón de "Marcar Todos / Desmarcar Todos" y buscador rápido.
+ * 2. COLORES SEGÚN AVANCE ESPERADO (ALINEADO CON HISTORIAL):
+ *    - Si un socio está al día en el avance transcurrido (ej: 42% en mes 5), se muestra en VERDE (Emerald).
+ *    - ÚNICAMENTE se muestra en ROJO cuando existe un déficit real o faltante pendiente en ese rubro.
+ * 3. PORCENTAJES EN ENTEROS (REDONDEO RIGUROSO):
+ *    - Todos los porcentajes se redondean sin decimales (Math.round).
  * 4. EXPORTACIÓN GOOGLE DOCS / EXCEL:
- *    - Formato HTML listo para copiar y pegar directo en Google Docs.
+ *    - Solo exporta los socios y proyectos seleccionados en la vista.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   X,
   Copy,
@@ -28,6 +28,10 @@ import {
   Filter,
   Calendar,
   Sparkles,
+  Search,
+  CheckSquare,
+  Square,
+  Users,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { getProjectConfigForSeason } from "../../lib/projectConfig";
@@ -77,19 +81,23 @@ export default function MissingDeliverablesReportModal({
   const [cutoffMonth, setCutoffMonth] = useState("");
   const [copied, setCopied] = useState(false);
   const [agreementsMap, setAgreementsMap] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProjectIds, setSelectedProjectIds] = useState(new Set());
 
+  // Inicializar temporada
   useEffect(() => {
     if (initialSeason) {
       setSelectedSeason(initialSeason);
     }
   }, [initialSeason]);
 
+  // Inicializar mes de corte al mes actual
   useEffect(() => {
     const currentMonthIdx = new Date().getMonth();
     setCutoffMonth(ALL_MONTHS[currentMonthIdx] || "Septiembre");
   }, []);
 
-  // Cargar acuerdos de localStorage
+  // Cargar acuerdos guardados desde localStorage
   useEffect(() => {
     if (!selectedSeason) return;
     try {
@@ -104,6 +112,22 @@ export default function MissingDeliverablesReportModal({
     }
   }, [selectedSeason]);
 
+  // Obtener todos los IDs de proyectos disponibles
+  const allProjectIds = useMemo(() => {
+    const ids = [];
+    partners.forEach((p) => {
+      (p.projects || []).forEach((proj) => ids.push(proj.id));
+    });
+    return ids;
+  }, [partners]);
+
+  // Al cargar socios, seleccionar todos los proyectos por defecto
+  useEffect(() => {
+    if (allProjectIds.length > 0) {
+      setSelectedProjectIds(new Set(allProjectIds));
+    }
+  }, [allProjectIds]);
+
   const handleAgreementChange = (projectId, text) => {
     const updated = { ...agreementsMap, [projectId]: text };
     setAgreementsMap(updated);
@@ -114,6 +138,24 @@ export default function MissingDeliverablesReportModal({
       );
     } catch (e) {
       console.error("Error guardando acuerdos:", e);
+    }
+  };
+
+  const toggleProjectSelection = (projectId) => {
+    const newSet = new Set(selectedProjectIds);
+    if (newSet.has(projectId)) {
+      newSet.delete(projectId);
+    } else {
+      newSet.add(projectId);
+    }
+    setSelectedProjectIds(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedProjectIds.size === allProjectIds.length) {
+      setSelectedProjectIds(new Set());
+    } else {
+      setSelectedProjectIds(new Set(allProjectIds));
     }
   };
 
@@ -150,8 +192,8 @@ export default function MissingDeliverablesReportModal({
     return monthSequence.slice(0, cutoffIdxInSeq + 1);
   };
 
-  // --- CÁLCULO ALINEADO CON HISTORY.JSX ---
-  const processedData = [];
+  // --- CÁLCULO PRINCIPAL Y DETALLE DE FALTANTES ---
+  const allProcessedData = [];
 
   partners.forEach((partner) => {
     (partner.projects || []).forEach((proj) => {
@@ -161,7 +203,6 @@ export default function MissingDeliverablesReportModal({
       const targetPhotos = parseInt(config?.monthly_photos_target || 10);
       const targetPosts = parseInt(config?.monthly_posts_target || 4);
 
-      // Reportes del proyecto filtrados por la temporada activa
       const reports = (proj.monthly_reports || []).filter(
         (r) => (r.season_name || "").trim() === selectedSeason.trim()
       );
@@ -175,14 +216,14 @@ export default function MissingDeliverablesReportModal({
       let accPhotoPercent = 0;
       let accPostPercent = 0;
       const missingObservations = [];
+      let photoHasDeficit = false;
+      let postHasDeficit = false;
 
-      // Evaluar cada mes transcurrido según los reportes reales
       elapsedMonths.forEach((monthName) => {
         const report = reports.find(
           (r) => normalize(r.report_month) === normalize(monthName)
         );
 
-        // Extraer valores reales con fallbacks seguros
         const photoCount = report
           ? parseInt(report.photo_count ?? report.photos ?? 0) || 0
           : 0;
@@ -192,11 +233,12 @@ export default function MissingDeliverablesReportModal({
           : 0;
 
         if (!report) {
+          photoHasDeficit = true;
+          postHasDeficit = true;
           missingObservations.push(
             `En ${monthName} no hay reporte (faltan ${targetPhotos} fotos y ${targetPosts} posts)`
           );
         } else {
-          // Cálculo de progreso exacto como en History.jsx
           const photoCompliance = Math.min(photoCount / (targetPhotos || 1), 1.0);
           const postCompliance = Math.min(postCount / (targetPosts || 1), 1.0);
 
@@ -204,6 +246,7 @@ export default function MissingDeliverablesReportModal({
           accPostPercent += postCompliance * maxMonthWeight;
 
           if (photoCount < targetPhotos) {
+            photoHasDeficit = true;
             if (photoCount === 0) {
               missingObservations.push(
                 `En ${monthName} no subió fotos (meta: ${targetPhotos})`
@@ -217,6 +260,7 @@ export default function MissingDeliverablesReportModal({
           }
 
           if (postCount < targetPosts) {
+            postHasDeficit = true;
             if (postCount === 0) {
               missingObservations.push(
                 `En ${monthName} no subió posts (meta: ${targetPosts})`
@@ -231,7 +275,7 @@ export default function MissingDeliverablesReportModal({
         }
       });
 
-      // Formatear porcentajes como en History.jsx (redondeado o 1 decimal)
+      // Redondeo riguroso sin decimales (Math.round)
       const pctFotos = Math.round(accPhotoPercent);
       const pctPosts = Math.round(accPostPercent);
       const pctGeneral = Math.round((pctFotos + pctPosts) / 2);
@@ -250,14 +294,15 @@ export default function MissingDeliverablesReportModal({
         }
       });
 
-      // Calcular hitos de video esperados hasta el mes de corte
       const cutoffIdx = ALL_MONTHS.findIndex(m => normalize(m) === normalize(cutoffMonth));
       const expectedVideoCount = effectiveVideoMonths.filter(
         m => (monthMap[normalize(m)] ?? 99) <= (cutoffIdx >= 0 ? cutoffIdx : 11)
       ).length;
 
+      let videoHasDeficit = false;
       const missingVideos = expectedVideoCount - totalVideosCount;
       if (missingVideos > 0) {
+        videoHasDeficit = true;
         missingObservations.push(
           `Falta${missingVideos > 1 ? "n" : ""} ${missingVideos} video${missingVideos > 1 ? "s" : ""} de temporada`
         );
@@ -269,6 +314,7 @@ export default function MissingDeliverablesReportModal({
 
       // --- EVALUACIÓN DE CAMPAÑAS ---
       let pctCampaigns = 100;
+      let campaignHasDeficit = false;
       if (seasonCampaigns.length > 0) {
         const completedCampaignTitles = new Set();
         reports.forEach((r) => {
@@ -283,6 +329,7 @@ export default function MissingDeliverablesReportModal({
         seasonCampaigns.forEach((sc) => {
           if (!completedCampaignTitles.has(normalize(sc.title))) {
             missingCampCount += 1;
+            campaignHasDeficit = true;
             missingObservations.push(`Falta evidencia de campaña: "${sc.title}"`);
           }
         });
@@ -292,7 +339,7 @@ export default function MissingDeliverablesReportModal({
         );
       }
 
-      processedData.push({
+      allProcessedData.push({
         partnerId: partner.id,
         partnerName: partner.name,
         projectId: proj.id,
@@ -302,43 +349,62 @@ export default function MissingDeliverablesReportModal({
         pctVideos,
         pctCampaigns,
         pctGeneral,
+        photoHasDeficit,
+        postHasDeficit,
+        videoHasDeficit,
+        campaignHasDeficit,
         missingObservations,
         agreements: agreementsMap[proj.id] || "",
+        isSelected: selectedProjectIds.has(proj.id),
       });
     });
   });
 
-  // --- FUNCIÓN: COPIAR A GOOGLE DOCS (FORMATO TABLA HTML) ---
+  // Filtrado por buscador y por selección de usuario
+  const filteredData = allProcessedData.filter((item) => {
+    const matchesSearch =
+      normalize(item.partnerName).includes(normalize(searchTerm)) ||
+      normalize(item.projectName).includes(normalize(searchTerm));
+    return matchesSearch;
+  });
+
+  // Solo exportar los elementos marcados (isSelected = true)
+  const exportData = filteredData.filter((item) => item.isSelected);
+
+  // --- FUNCIÓN: COPIAR A GOOGLE DOCS (FORMATO TABLA HTML EN VERDE Y ROJO SEGÚN FALTANTE) ---
   const handleCopyToDocs = async () => {
-    const rowsHtml = processedData
+    if (exportData.length === 0) {
+      alert("Por favor selecciona al menos un socio/proyecto para exportar.");
+      return;
+    }
+
+    const rowsHtml = exportData
       .map((item, index) => {
         const bgColor = index % 2 === 0 ? "#ffffff" : "#f8fafc";
-        const fotosBadge =
-          item.pctFotos < 100
-            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctFotos}%</span>`
-            : `<span style="color: #16a34a; font-weight: bold;">${item.pctFotos}%</span>`;
+        
+        // Estilos de porcentaje: VERDE si está al día, ROJO únicamente si hay déficit real
+        const fotosBadge = item.photoHasDeficit
+          ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctFotos}%</span>`
+          : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px;">${item.pctFotos}%</span>`;
 
-        const postsBadge =
-          item.pctPosts < 100
-            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctPosts}%</span>`
-            : `<span style="color: #16a34a; font-weight: bold;">${item.pctPosts}%</span>`;
+        const postsBadge = item.postHasDeficit
+          ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctPosts}%</span>`
+          : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px;">${item.pctPosts}%</span>`;
 
-        const videosBadge =
-          item.pctVideos < 100
-            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctVideos}%</span>`
-            : `<span style="color: #16a34a; font-weight: bold;">${item.pctVideos}%</span>`;
+        const videosBadge = item.videoHasDeficit
+          ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctVideos}%</span>`
+          : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px;">${item.pctVideos}%</span>`;
 
-        const generalBadge =
-          item.pctGeneral < 80
-            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctGeneral}%</span>`
-            : `<span style="color: #16a34a; font-weight: bold;">${item.pctGeneral}%</span>`;
+        const generalBadge = item.missingObservations.length > 0
+          ? `<span style="color: #dc2626; font-weight: bold; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fca5a5;">${item.pctGeneral}%</span>`
+          : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">${item.pctGeneral}%</span>`;
 
         const obsContent =
           item.missingObservations.length > 0
             ? `<ul style="margin: 0; padding-left: 16px; color: #991b1b;">${item.missingObservations
                 .map((obs) => `<li style="margin-bottom: 2px;">${obs}</li>`)
                 .join("")}</ul>`
-            : `<span style="color: #16a34a; font-weight: 500;">✓ Al día (Sin faltantes)</span>`;
+            : `<span style="color: #16a34a; font-weight: 600;">✓ Al día (Sin faltantes)</span>`;
 
         const agreementContent = item.agreements.trim()
           ? `<span style="color: #1e293b;">${item.agreements.replace(/\n/g, "<br/>")}</span>`
@@ -366,7 +432,7 @@ export default function MissingDeliverablesReportModal({
       <div style="font-family: Arial, sans-serif; color: #1e293b;">
         <h2 style="color: #0f172a; margin-bottom: 4px;">Acción Andina - Reporte Consolidado de Faltantes y Acuerdos</h2>
         <p style="color: #64748b; font-size: 12px; margin-top: 0; margin-bottom: 16px;">
-          <strong>Temporada:</strong> ${selectedSeason} | <strong>Mes de Corte:</strong> ${cutoffMonth} | <strong>Fecha de Generación:</strong> ${new Date().toLocaleDateString()}
+          <strong>Temporada:</strong> ${selectedSeason} | <strong>Mes de Corte:</strong> ${cutoffMonth} | <strong>Socios incluidos:</strong> ${exportData.length}
         </p>
         <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
           <thead>
@@ -388,7 +454,7 @@ export default function MissingDeliverablesReportModal({
       </div>
     `;
 
-    const plainText = processedData
+    const plainText = exportData
       .map(
         (d) =>
           `* ${d.partnerName} (${d.projectName})\n  - % Fotos: ${d.pctFotos}% | % Posts: ${d.pctPosts}% | % Videos: ${d.pctVideos}% | % General: ${d.pctGeneral}%\n  - Faltantes: ${
@@ -419,9 +485,14 @@ export default function MissingDeliverablesReportModal({
     }
   };
 
-  // --- FUNCIÓN: EXPORTAR A EXCEL ---
+  // --- FUNCIÓN: EXPORTAR A EXCEL (SOLO SELECCIONADOS) ---
   const handleExportExcel = () => {
-    const exportRows = processedData.map((d) => ({
+    if (exportData.length === 0) {
+      alert("Por favor selecciona al menos un socio/proyecto para exportar.");
+      return;
+    }
+
+    const exportRows = exportData.map((d) => ({
       Socio: d.partnerName,
       Paisaje: d.projectName,
       "Fotos (%)": `${d.pctFotos}%`,
@@ -457,13 +528,13 @@ export default function MissingDeliverablesReportModal({
                   Resumen Consolidado de Faltantes y Acuerdos
                 </h2>
                 <p className="text-xs text-gray-300 font-medium">
-                  Cálculo alineado con Historial y registro de acuerdos por socio.
+                  Filtrado de socios, cálculo entero de avance y registro de acuerdos.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* FILTROS Y CONTROLES */}
+          {/* CONTROLES PRINCIPALES */}
           <div className="flex flex-wrap items-center gap-3">
             {/* SELECTOR TEMPORADA */}
             <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-bold border border-white/10">
@@ -502,42 +573,69 @@ export default function MissingDeliverablesReportModal({
             {/* BOTÓN CERRAR */}
             <button
               onClick={onClose}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all ml-auto md:ml-2"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all ml-auto md:ml-2 cursor-pointer"
             >
               <X size={20} />
             </button>
           </div>
         </div>
 
-        {/* ACCIONES SUPERIORES / EXPORTAR */}
+        {/* BARRA DE HERRAMIENTAS: BUSCADOR, BOTÓN DE SELECCIÓN Y EXPORTAR */}
         <div className="bg-slate-50 px-6 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-gray-600 font-semibold">
-            <Sparkles size={16} className="text-brand" />
-            <span>
-              Evaluando hasta <strong className="text-gray-900">{cutoffMonth}</strong> en temporada{" "}
-              <strong className="text-gray-900">{selectedSeason}</strong>.
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* BUSCADOR */}
+            <div className="relative min-w-[220px]">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar socio o paisaje..."
+                className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+
+            {/* BOTÓN MARCAR / DESMARCAR TODOS */}
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 bg-white border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded-xl font-bold text-gray-700 transition-all shadow-sm cursor-pointer"
+            >
+              {selectedProjectIds.size === allProjectIds.length ? (
+                <>
+                  <CheckSquare size={14} className="text-brand" />
+                  <span>Desmarcar Todos</span>
+                </>
+              ) : (
+                <>
+                  <Square size={14} className="text-gray-400" />
+                  <span>Marcar Todos ({selectedProjectIds.size}/{allProjectIds.length})</span>
+                </>
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleExportExcel}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-sm active:scale-95"
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
             >
               <FileSpreadsheet size={15} />
-              <span>Exportar Excel</span>
+              <span>Exportar Excel ({exportData.length})</span>
             </button>
 
             <button
               onClick={handleCopyToDocs}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl font-black transition-all shadow-md active:scale-95 text-white ${
+              className={`flex items-center gap-2 px-5 py-2 rounded-xl font-black transition-all shadow-md active:scale-95 text-white cursor-pointer ${
                 copied
                   ? "bg-emerald-500 hover:bg-emerald-600"
                   : "bg-brand hover:brightness-110 shadow-brand/20"
               }`}
             >
               {copied ? <Check size={16} /> : <Copy size={16} />}
-              <span>{copied ? "¡Copiado para Google Docs!" : "Copiar para Google Docs"}</span>
+              <span>{copied ? "¡Copiado para Google Docs!" : `Copiar para Docs (${exportData.length})`}</span>
             </button>
           </div>
         </div>
@@ -548,6 +646,14 @@ export default function MissingDeliverablesReportModal({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-gray-900 text-white uppercase text-[10px] tracking-wider font-black">
+                  <th className="p-3.5 border-b border-gray-800 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedProjectIds.size === allProjectIds.length && allProjectIds.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded accent-brand cursor-pointer"
+                    />
+                  </th>
                   <th className="p-3.5 border-b border-gray-800 min-w-[200px]">
                     Socio / Paisaje
                   </th>
@@ -575,22 +681,32 @@ export default function MissingDeliverablesReportModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {processedData.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-gray-400 font-medium">
-                      No se encontraron socios o proyectos configurados para esta temporada.
+                    <td colSpan={9} className="p-8 text-center text-gray-400 font-medium">
+                      No se encontraron socios o proyectos que coincidan con la búsqueda.
                     </td>
                   </tr>
                 ) : (
-                  processedData.map((item, idx) => {
+                  filteredData.map((item, idx) => {
                     const isEven = idx % 2 === 0;
                     return (
                       <tr
                         key={item.projectId}
                         className={`hover:bg-slate-50 transition-colors ${
-                          isEven ? "bg-white" : "bg-slate-50/50"
+                          !item.isSelected ? "opacity-50 bg-gray-50" : isEven ? "bg-white" : "bg-slate-50/50"
                         }`}
                       >
+                        {/* CHECKBOX SELECCIÓN */}
+                        <td className="p-3.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={item.isSelected}
+                            onChange={() => toggleProjectSelection(item.projectId)}
+                            className="rounded accent-brand cursor-pointer w-4 h-4"
+                          />
+                        </td>
+
                         {/* SOCIO Y PAISAJE */}
                         <td className="p-3.5 font-bold text-gray-900">
                           <div className="text-sm font-black text-slate-900">
@@ -601,36 +717,42 @@ export default function MissingDeliverablesReportModal({
                           </div>
                         </td>
 
-                        {/* % FOTOS */}
+                        {/* % FOTOS (VERDE SI AL DÍA, ROJO SI HAY DÉFICIT REAL) */}
                         <td className="p-3.5 text-center font-black">
-                          {item.pctFotos < 100 ? (
+                          {item.photoHasDeficit ? (
                             <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-xs border border-red-200">
                               {item.pctFotos}%
                             </span>
                           ) : (
-                            <span className="text-emerald-600">{item.pctFotos}%</span>
+                            <span className="inline-block bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-lg text-xs border border-emerald-200">
+                              {item.pctFotos}%
+                            </span>
                           )}
                         </td>
 
-                        {/* % POSTS */}
+                        {/* % POSTS (VERDE SI AL DÍA, ROJO SI HAY DÉFICIT REAL) */}
                         <td className="p-3.5 text-center font-black">
-                          {item.pctPosts < 100 ? (
+                          {item.postHasDeficit ? (
                             <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-xs border border-red-200">
                               {item.pctPosts}%
                             </span>
                           ) : (
-                            <span className="text-emerald-600">{item.pctPosts}%</span>
+                            <span className="inline-block bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-lg text-xs border border-emerald-200">
+                              {item.pctPosts}%
+                            </span>
                           )}
                         </td>
 
                         {/* % VIDEOS */}
                         <td className="p-3.5 text-center font-black">
-                          {item.pctVideos < 100 ? (
+                          {item.videoHasDeficit ? (
                             <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-xs border border-red-200">
                               {item.pctVideos}%
                             </span>
                           ) : (
-                            <span className="text-emerald-600">{item.pctVideos}%</span>
+                            <span className="inline-block bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-lg text-xs border border-emerald-200">
+                              {item.pctVideos}%
+                            </span>
                           )}
                         </td>
 
@@ -641,8 +763,8 @@ export default function MissingDeliverablesReportModal({
 
                         {/* % GENERAL */}
                         <td className="p-3.5 text-center font-black">
-                          {item.pctGeneral < 80 ? (
-                            <span className="inline-block bg-red-50 text-red-600 px-2.5 py-1 rounded-xl text-xs border border-red-300 font-extrabold shadow-sm">
+                          {item.missingObservations.length > 0 ? (
+                            <span className="inline-block bg-amber-50 text-amber-700 px-2.5 py-1 rounded-xl text-xs border border-amber-300 font-extrabold shadow-sm">
                               {item.pctGeneral}%
                             </span>
                           ) : (
@@ -697,11 +819,11 @@ export default function MissingDeliverablesReportModal({
         {/* FOOTER */}
         <div className="bg-slate-100 px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500 font-medium">
           <div>
-            💡 <strong className="text-gray-700">Nota:</strong> El botón "Copiar para Google Docs" conserva la tabla, estilos y colores para pegarla directamente en cualquier documento.
+            💡 <strong className="text-gray-700">Tip:</strong> Usa las casillas de verificación para incluir/excluir socios del reporte final.
           </div>
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold transition-all"
+            className="w-full sm:w-auto px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold transition-all cursor-pointer"
           >
             Cerrar
           </button>
