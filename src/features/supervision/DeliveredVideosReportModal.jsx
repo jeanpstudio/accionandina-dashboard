@@ -184,31 +184,51 @@ export default function DeliveredVideosReportModal({
         (r) => !selectedSeason || r.season_name === selectedSeason
       );
 
-      // Evaluación para cada uno de los 3 videos
+      // Colección de videos entregados en la temporada para este proyecto
+      const uniqueVideos = [];
+      const seenKeys = new Set();
+      reports.forEach((r) => {
+        if (Array.isArray(r.videos)) {
+          r.videos.forEach((v) => {
+            if (!v) return;
+            const key = typeof v === "string"
+              ? v.trim().toLowerCase()
+              : (v.topic || v.title || v.link || v.comment || "").trim().toLowerCase();
+            if (key && !seenKeys.has(key)) {
+              seenKeys.add(key);
+              uniqueVideos.push(v);
+            }
+          });
+        }
+      });
+
+      const maxVideosInAnyReport = reports.reduce(
+        (max, r) => (Array.isArray(r.videos) ? Math.max(max, r.videos.length) : max),
+        0
+      );
+      const totalVideosDelivered = Math.max(uniqueVideos.length, maxVideosInAnyReport);
+
+      // Evaluación para cada uno de los 3 videos de temporada
       const videosInfo = effectiveVideoMonths.map((mName, vIdx) => {
         const vNum = vIdx + 1;
         const evalKey = `${proj.id}_v${vNum}`;
         const savedEval = evaluationsMap[evalKey] || {};
 
-        // Buscar si existe un reporte entregado para el mes correspondiente
-        const monthReport = reports.find(
-          (r) => normalize(r.report_month) === normalize(mName)
-        );
+        // El video vNum se considera entregado automáticamente si la cantidad total entregada en la temporada es >= vNum
+        const autoDelivered = vNum <= totalVideosDelivered;
 
-        const hasReportVideos = monthReport && Array.isArray(monthReport.videos) && monthReport.videos.length > 0;
-        const hasReportComment = monthReport && monthReport.video_comment && monthReport.video_comment.trim().length > 0;
-        
-        // Estado por defecto detectado automáticamente desde BD
-        const autoDelivered = Boolean(monthReport && (hasReportVideos || hasReportComment));
-
-        // Subido status: si no hay valor manual guardado, asumir 'si' si autoDelivered es true, sino 'no'
+        // Subido status: si no hay valor manual guardado en localStorage, usar autoDelivered ('si' o 'no')
         const subidoStatus = savedEval.subido !== undefined 
           ? savedEval.subido 
           : (autoDelivered ? "si" : "no");
 
-        const calidad = savedEval.calidad || (autoDelivered ? "Óptima" : "Sin evaluar");
-        const duracion = savedEval.duracion || (autoDelivered ? "1-3 min" : "N/A");
-        const obs = savedEval.obs !== undefined ? savedEval.obs : (monthReport?.video_comment || "");
+        const calidad = savedEval.calidad || (subidoStatus === "si" ? "Óptima" : "Sin evaluar");
+        const duracion = savedEval.duracion || (subidoStatus === "si" ? "1-3 min" : "N/A");
+        
+        // Cargar observación guardada o el comentario del video si existe
+        const videoEntry = uniqueVideos[vIdx];
+        const defaultObs = videoEntry ? (videoEntry.comment || videoEntry.topic || "") : "";
+        const obs = savedEval.obs !== undefined ? savedEval.obs : defaultObs;
 
         return {
           vNum,
@@ -218,7 +238,7 @@ export default function DeliveredVideosReportModal({
           calidad,
           duracion,
           obs,
-          monthReport,
+          videoEntry,
         };
       });
 
@@ -229,6 +249,7 @@ export default function DeliveredVideosReportModal({
         partnerName: partner.name,
         projectId: proj.id,
         projectName: proj.name,
+        totalVideosDelivered,
         videosInfo,
         effectiveVideoMonths,
         isSelected,
