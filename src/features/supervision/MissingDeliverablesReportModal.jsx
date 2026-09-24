@@ -3,16 +3,17 @@
  * -------------------------------------------
  * Modal / Vista consolidada de reporte de faltantes y acuerdos por socio.
  * 
- * LÓGICA DE NEGOCIO:
- * 1. EVALUACIÓN MES A MES (SIN ACUMULACIÓN REPARTIDA):
- *    - Cada mes se evalúa de manera independiente con tope en 100% (min(subidas/meta, 1)).
- *    - Si un socio sube 30 fotos en marzo con meta 10, marzo es 100%, pero no compensa abril.
+ * LÓGICA DE NEGOCIO ALINEADA EXACTAMENTE CON HISTORIAL (History.jsx):
+ * 1. CÁLCULO DE PORCENTAJES:
+ *    - Usa la misma fórmula matemática que History.jsx (accumulatedPercent, accPhotoPercent, accPostPercent).
+ *    - Evalúa la contribución de cada mes cumplido respecto a la duración de la temporada (ej. 100/12 = 8.33% por mes cumplido).
  * 2. DETALLE AUTOMÁTICO DE FALTANTES:
- *    - Genera texto explícito con los faltantes (ej: "En Abril faltan 5 fotos", "Falta video 1 de Junio").
+ *    - Revisa los meses transcurridos hasta el mes de corte.
+ *    - Detecta déficit real de fotos (photo_count), posts (post_count), videos e hitos de campaña.
  * 3. ACUERDOS CON EL SOCIO:
- *    - Columna editable para registrar acuerdos directos con la ONG sobre cómo regularizarán.
- * 4. COPIADO EN FORMATO GOOGLE DOCS / EXCEL:
- *    - Formato HTML enriquecido compatible con copiar/pegar directo en Google Docs.
+ *    - Columna editable guardada en localStorage por proyecto y temporada.
+ * 4. EXPORTACIÓN GOOGLE DOCS / EXCEL:
+ *    - Formato HTML listo para copiar y pegar directo en Google Docs.
  */
 
 import { useState, useEffect } from "react";
@@ -26,8 +27,6 @@ import {
   CheckCircle2,
   Filter,
   Calendar,
-  Save,
-  MessageSquare,
   Sparkles,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -48,6 +47,22 @@ const ALL_MONTHS = [
   "Diciembre",
 ];
 
+const monthMap = {
+  enero: 0,
+  febrero: 1,
+  marzo: 2,
+  abril: 3,
+  mayo: 4,
+  junio: 5,
+  julio: 6,
+  agosto: 7,
+  septiembre: 8,
+  setiembre: 8,
+  octubre: 9,
+  noviembre: 10,
+  diciembre: 11,
+};
+
 const normalize = (str) => (str ? str.toString().toLowerCase().trim() : "");
 
 export default function MissingDeliverablesReportModal({
@@ -63,7 +78,6 @@ export default function MissingDeliverablesReportModal({
   const [copied, setCopied] = useState(false);
   const [agreementsMap, setAgreementsMap] = useState({});
 
-  // Determinar mes actual por defecto al abrir
   useEffect(() => {
     if (initialSeason) {
       setSelectedSeason(initialSeason);
@@ -75,7 +89,7 @@ export default function MissingDeliverablesReportModal({
     setCutoffMonth(ALL_MONTHS[currentMonthIdx] || "Septiembre");
   }, []);
 
-  // Cargar acuerdos guardados de localStorage al cambiar de temporada
+  // Cargar acuerdos de localStorage
   useEffect(() => {
     if (!selectedSeason) return;
     try {
@@ -90,7 +104,6 @@ export default function MissingDeliverablesReportModal({
     }
   }, [selectedSeason]);
 
-  // Guardar acuerdos en localStorage
   const handleAgreementChange = (projectId, text) => {
     const updated = { ...agreementsMap, [projectId]: text };
     setAgreementsMap(updated);
@@ -106,13 +119,13 @@ export default function MissingDeliverablesReportModal({
 
   if (!isOpen) return null;
 
-  // --- LÓGICA DE CÁLCULO DE SECUENCIA DE MESES ---
+  // --- OBTENER SECUENCIA DE MESES TRANSCURRIDOS HASTA EL MES DE CORTE ---
   const getElapsedMonthsForProject = (proj, seasonName, targetCutoff) => {
     const config = getProjectConfigForSeason(proj, seasonName);
     const startDateStr = config?.start_date || proj.start_date;
-    const duration = config?.season_duration_months || 12;
+    const duration = parseInt(config?.season_duration_months || 12);
 
-    let startMonthIdx = 0; // Por defecto Enero (0)
+    let startMonthIdx = 0; // Default Enero (0)
     if (startDateStr) {
       const d = new Date(startDateStr + "T12:00:00");
       if (!isNaN(d.getTime())) {
@@ -120,36 +133,35 @@ export default function MissingDeliverablesReportModal({
       }
     }
 
-    // Generar la secuencia de meses según duración
     const monthSequence = [];
     for (let i = 0; i < duration; i++) {
       const mIdx = (startMonthIdx + i) % 12;
       monthSequence.push(ALL_MONTHS[mIdx]);
     }
 
-    // Filtrar hasta el mes de corte inclusivo
     const cutoffIdxInSeq = monthSequence.findIndex(
       (m) => normalize(m) === normalize(targetCutoff)
     );
 
     if (cutoffIdxInSeq === -1) {
-      // Si el mes de corte no está en la secuencia, tomar toda la secuencia transcurrida
       return monthSequence;
     }
 
     return monthSequence.slice(0, cutoffIdxInSeq + 1);
   };
 
-  // --- PROCESAMIENTO PRINCIPAL DE PROYECTOS Y FALTANTES ---
+  // --- CÁLCULO ALINEADO CON HISTORY.JSX ---
   const processedData = [];
 
   partners.forEach((partner) => {
     (partner.projects || []).forEach((proj) => {
       const config = getProjectConfigForSeason(proj, selectedSeason);
-      const photoTarget = config?.monthly_photos_target || 10;
-      const postTarget = config?.monthly_posts_target || 4;
+      const seasonMonths = parseInt(config?.season_duration_months || 12);
+      const maxMonthWeight = 100 / seasonMonths;
+      const targetPhotos = parseInt(config?.monthly_photos_target || 10);
+      const targetPosts = parseInt(config?.monthly_posts_target || 4);
 
-      // Reportes filtrados por la temporada seleccionada
+      // Reportes del proyecto filtrados por la temporada activa
       const reports = (proj.monthly_reports || []).filter(
         (r) => (r.season_name || "").trim() === selectedSeason.trim()
       );
@@ -160,77 +172,99 @@ export default function MissingDeliverablesReportModal({
         cutoffMonth
       );
 
-      let photoComplianceSum = 0;
-      let postComplianceSum = 0;
+      let accPhotoPercent = 0;
+      let accPostPercent = 0;
       const missingObservations = [];
 
-      // Evaluamos mes por mes transcurrido
+      // Evaluar cada mes transcurrido según los reportes reales
       elapsedMonths.forEach((monthName) => {
         const report = reports.find(
           (r) => normalize(r.report_month) === normalize(monthName)
         );
 
-        const photoCount = report ? parseInt(report.photo_count) || 0 : 0;
-        const postCount = report ? parseInt(report.post_count) || 0 : 0;
+        // Extraer valores reales con fallbacks seguros
+        const photoCount = report
+          ? parseInt(report.photo_count ?? report.photos ?? 0) || 0
+          : 0;
 
-        // Cumplimiento capped al 100% por mes (1.0)
-        const photoRatio = Math.min(photoCount / (photoTarget || 1), 1.0);
-        const postRatio = Math.min(postCount / (postTarget || 1), 1.0);
+        const postCount = report
+          ? parseInt(report.post_count ?? report.posts_count ?? report.posts ?? 0) || 0
+          : 0;
 
-        photoComplianceSum += photoRatio;
-        postComplianceSum += postRatio;
+        if (!report) {
+          missingObservations.push(
+            `En ${monthName} no hay reporte (faltan ${targetPhotos} fotos y ${targetPosts} posts)`
+          );
+        } else {
+          // Cálculo de progreso exacto como en History.jsx
+          const photoCompliance = Math.min(photoCount / (targetPhotos || 1), 1.0);
+          const postCompliance = Math.min(postCount / (targetPosts || 1), 1.0);
 
-        // Registro de observaciones si hay déficit
-        if (photoCount < photoTarget) {
-          if (photoCount === 0) {
-            missingObservations.push(`En ${monthName} no subió fotos (meta: ${photoTarget})`);
-          } else {
-            const diff = photoTarget - photoCount;
-            missingObservations.push(`En ${monthName} faltan ${diff} fotos (${photoCount}/${photoTarget})`);
+          accPhotoPercent += photoCompliance * maxMonthWeight;
+          accPostPercent += postCompliance * maxMonthWeight;
+
+          if (photoCount < targetPhotos) {
+            if (photoCount === 0) {
+              missingObservations.push(
+                `En ${monthName} no subió fotos (meta: ${targetPhotos})`
+              );
+            } else {
+              const diff = targetPhotos - photoCount;
+              missingObservations.push(
+                `En ${monthName} faltan ${diff} foto${diff > 1 ? "s" : ""} (${photoCount}/${targetPhotos})`
+              );
+            }
           }
-        }
 
-        if (postCount < postTarget) {
-          if (postCount === 0) {
-            missingObservations.push(`En ${monthName} no subió publicaciones (meta: ${postTarget})`);
-          } else {
-            const diff = postTarget - postCount;
-            missingObservations.push(`En ${monthName} faltan ${diff} publicaciones (${postCount}/${postTarget})`);
+          if (postCount < targetPosts) {
+            if (postCount === 0) {
+              missingObservations.push(
+                `En ${monthName} no subió posts (meta: ${targetPosts})`
+              );
+            } else {
+              const diff = targetPosts - postCount;
+              missingObservations.push(
+                `En ${monthName} faltan ${diff} post${diff > 1 ? "s" : ""} (${postCount}/${targetPosts})`
+              );
+            }
           }
         }
       });
 
-      const totalElapsed = elapsedMonths.length || 1;
-      const pctFotos = Math.round((photoComplianceSum / totalElapsed) * 100);
-      const pctPosts = Math.round((postComplianceSum / totalElapsed) * 100);
+      // Formatear porcentajes como en History.jsx (redondeado o 1 decimal)
+      const pctFotos = Math.round(accPhotoPercent);
+      const pctPosts = Math.round(accPostPercent);
+      const pctGeneral = Math.round((pctFotos + pctPosts) / 2);
 
       // --- EVALUACIÓN DE VIDEOS ---
-      const videoMilestoneMonths = Array.isArray(config?.custom_video_months) && config.custom_video_months.length > 0
-        ? config.custom_video_months
-        : ["Junio", "Octubre", "Marzo"];
+      const effectiveVideoMonths = proj.override_season_rules && Array.isArray(proj.custom_video_months) && proj.custom_video_months.length > 0
+        ? proj.custom_video_months
+        : (Array.isArray(config?.custom_video_months) && config.custom_video_months.length > 0
+            ? config.custom_video_months
+            : ["Junio", "Octubre", "Marzo"]);
 
-      let videosUploadedTotal = 0;
+      let totalVideosCount = 0;
       reports.forEach((r) => {
         if (Array.isArray(r.videos)) {
-          videosUploadedTotal += r.videos.length;
+          totalVideosCount += r.videos.length;
         }
       });
 
-      // Contar cuántos hitos de video correspondían hasta el mes de corte
-      let videoMilestonesPassed = 0;
-      videoMilestoneMonths.forEach((vm) => {
-        if (elapsedMonths.some((em) => normalize(em) === normalize(vm))) {
-          videoMilestonesPassed += 1;
-          // Si el total subido es menor a la cantidad de hitos pasados
-          if (videosUploadedTotal < videoMilestonesPassed) {
-            missingObservations.push(`Falta entrega de Video de ${vm}`);
-          }
-        }
-      });
+      // Calcular hitos de video esperados hasta el mes de corte
+      const cutoffIdx = ALL_MONTHS.findIndex(m => normalize(m) === normalize(cutoffMonth));
+      const expectedVideoCount = effectiveVideoMonths.filter(
+        m => (monthMap[normalize(m)] ?? 99) <= (cutoffIdx >= 0 ? cutoffIdx : 11)
+      ).length;
 
-      const videoTarget = videoMilestonesPassed > 0 ? videoMilestonesPassed : 1;
-      const pctVideos = videoMilestonesPassed > 0
-        ? Math.min(Math.round((videosUploadedTotal / videoTarget) * 100), 100)
+      const missingVideos = expectedVideoCount - totalVideosCount;
+      if (missingVideos > 0) {
+        missingObservations.push(
+          `Falta${missingVideos > 1 ? "n" : ""} ${missingVideos} video${missingVideos > 1 ? "s" : ""} de temporada`
+        );
+      }
+
+      const pctVideos = expectedVideoCount > 0
+        ? Math.min(Math.round((totalVideosCount / expectedVideoCount) * 100), 100)
         : 100;
 
       // --- EVALUACIÓN DE CAMPAÑAS ---
@@ -245,20 +279,18 @@ export default function MissingDeliverablesReportModal({
           }
         });
 
-        let missingCampaignCount = 0;
+        let missingCampCount = 0;
         seasonCampaigns.forEach((sc) => {
           if (!completedCampaignTitles.has(normalize(sc.title))) {
-            missingCampaignCount += 1;
+            missingCampCount += 1;
             missingObservations.push(`Falta evidencia de campaña: "${sc.title}"`);
           }
         });
 
-        const totalCamps = seasonCampaigns.length;
-        pctCampaigns = Math.round(((totalCamps - missingCampaignCount) / totalCamps) * 100);
+        pctCampaigns = Math.round(
+          ((seasonCampaigns.length - missingCampCount) / seasonCampaigns.length) * 100
+        );
       }
-
-      // --- PORCENTAJE GENERAL DE SALUD ---
-      const pctGeneral = Math.round((pctFotos + pctPosts + pctVideos + pctCampaigns) / 4);
 
       processedData.push({
         partnerId: partner.id,
@@ -276,30 +308,29 @@ export default function MissingDeliverablesReportModal({
     });
   });
 
-  // --- FUNCIÓN: COPIAR A GOOGLE DOCS (FORMATO HTML RIQUÍSIMO) ---
+  // --- FUNCIÓN: COPIAR A GOOGLE DOCS (FORMATO TABLA HTML) ---
   const handleCopyToDocs = async () => {
-    // Generación de HTML estilizado tipo tabla
     const rowsHtml = processedData
       .map((item, index) => {
-        const bgColor = index % 2 === 0 ? "#ffffff" : "#f9fafb";
+        const bgColor = index % 2 === 0 ? "#ffffff" : "#f8fafc";
         const fotosBadge =
           item.pctFotos < 100
-            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctFotos}%</span>`
+            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctFotos}%</span>`
             : `<span style="color: #16a34a; font-weight: bold;">${item.pctFotos}%</span>`;
 
         const postsBadge =
           item.pctPosts < 100
-            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctPosts}%</span>`
+            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctPosts}%</span>`
             : `<span style="color: #16a34a; font-weight: bold;">${item.pctPosts}%</span>`;
 
         const videosBadge =
           item.pctVideos < 100
-            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctVideos}%</span>`
+            ? `<span style="color: #dc2626; font-weight: bold;">${item.pctVideos}%</span>`
             : `<span style="color: #16a34a; font-weight: bold;">${item.pctVideos}%</span>`;
 
         const generalBadge =
           item.pctGeneral < 80
-            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fca5a5;">${item.pctGeneral}%</span>`
+            ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctGeneral}%</span>`
             : `<span style="color: #16a34a; font-weight: bold;">${item.pctGeneral}%</span>`;
 
         const obsContent =
@@ -342,7 +373,7 @@ export default function MissingDeliverablesReportModal({
             <tr style="background-color: #0f172a; color: #ffffff; font-size: 13px; text-align: left;">
               <th style="padding: 10px; border: 1px solid #0f172a;">Socio / Paisaje</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Fotos</th>
-              <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Publicaciones</th>
+              <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Posts</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Videos</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Campañas</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% General</th>
@@ -357,7 +388,6 @@ export default function MissingDeliverablesReportModal({
       </div>
     `;
 
-    // Generar versión Plain Text para fallback
     const plainText = processedData
       .map(
         (d) =>
@@ -382,8 +412,7 @@ export default function MissingDeliverablesReportModal({
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch (err) {
-      console.error("Error al copiar HTML al portapapeles:", err);
-      // Fallback a texto plano
+      console.error("Error al copiar al portapapeles:", err);
       await navigator.clipboard.writeText(plainText);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
@@ -396,7 +425,7 @@ export default function MissingDeliverablesReportModal({
       Socio: d.partnerName,
       Paisaje: d.projectName,
       "Fotos (%)": `${d.pctFotos}%`,
-      "Publicaciones (%)": `${d.pctPosts}%`,
+      "Posts (%)": `${d.pctPosts}%`,
       "Videos (%)": `${d.pctVideos}%`,
       "Campañas (%)": `${d.pctCampaigns}%`,
       "Cumplimiento General (%)": `${d.pctGeneral}%`,
@@ -428,7 +457,7 @@ export default function MissingDeliverablesReportModal({
                   Resumen Consolidado de Faltantes y Acuerdos
                 </h2>
                 <p className="text-xs text-gray-300 font-medium">
-                  Evaluación de cumplimiento mes a mes por socio y registro de compromisos.
+                  Cálculo alineado con Historial y registro de acuerdos por socio.
                 </p>
               </div>
             </div>

@@ -338,7 +338,7 @@ export default function Supervision() {
             projects (
               *,
               project_season_configs ( * ),
-              monthly_reports (id, report_month, report_year, photo_count, season_name)
+              monthly_reports ( * )
             )
           `,
         )
