@@ -10,9 +10,11 @@
  * 2. COLORES SEGÚN AVANCE ESPERADO (ALINEADO CON HISTORIAL):
  *    - Si un socio está al día en el avance transcurrido (ej: 42% en mes 5), se muestra en VERDE (Emerald).
  *    - ÚNICAMENTE se muestra en ROJO cuando existe un déficit real o faltante pendiente en ese rubro.
- * 3. PORCENTAJES EN ENTEROS (REDONDEO RIGUROSO):
- *    - Todos los porcentajes se redondean sin decimales (Math.round).
- * 4. EXPORTACIÓN GOOGLE DOCS / EXCEL:
+ * 3. CAMPAÑAS EN FORMATO CONTEO ("X de Y"):
+ *    - Muestra cuántas campañas ha realizado el socio del total de la temporada (ej. "1 de 3", "2 de 3").
+ * 4. SIN COLUMNA DE PROMEDIO:
+ *    - Se eliminó la columna de promedio general para mantener la tabla limpia y enfocada en métricas directas.
+ * 5. EXPORTACIÓN GOOGLE DOCS / EXCEL:
  *    - Solo exporta los socios y proyectos seleccionados en la vista.
  */
 
@@ -31,7 +33,6 @@ import {
   Search,
   CheckSquare,
   Square,
-  Users,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { getProjectConfigForSeason } from "../../lib/projectConfig";
@@ -278,7 +279,6 @@ export default function MissingDeliverablesReportModal({
       // Redondeo riguroso sin decimales (Math.round)
       const pctFotos = Math.round(accPhotoPercent);
       const pctPosts = Math.round(accPostPercent);
-      const pctGeneral = Math.round((pctFotos + pctPosts) / 2);
 
       // --- EVALUACIÓN DE VIDEOS ---
       const effectiveVideoMonths = proj.override_season_rules && Array.isArray(proj.custom_video_months) && proj.custom_video_months.length > 0
@@ -312,31 +312,28 @@ export default function MissingDeliverablesReportModal({
         ? Math.min(Math.round((totalVideosCount / expectedVideoCount) * 100), 100)
         : 100;
 
-      // --- EVALUACIÓN DE CAMPAÑAS ---
-      let pctCampaigns = 100;
-      let campaignHasDeficit = false;
-      if (seasonCampaigns.length > 0) {
-        const completedCampaignTitles = new Set();
-        reports.forEach((r) => {
-          if (Array.isArray(r.campaigns)) {
-            r.campaigns.forEach((c) => {
-              if (c.title) completedCampaignTitles.add(normalize(c.title));
-            });
-          }
-        });
+      // --- EVALUACIÓN DE CAMPAÑAS (FORMATO "X de Y") ---
+      const completedCampaignTitles = new Set();
+      reports.forEach((r) => {
+        if (Array.isArray(r.campaigns)) {
+          r.campaigns.forEach((c) => {
+            if (c.title && c.title.trim()) {
+              completedCampaignTitles.add(normalize(c.title));
+            }
+          });
+        }
+      });
 
-        let missingCampCount = 0;
+      const completedCampCount = completedCampaignTitles.size;
+      const targetCampCount = seasonCampaigns.length > 0 ? seasonCampaigns.length : 3;
+      const campaignsText = `${completedCampCount} de ${targetCampCount}`;
+
+      if (seasonCampaigns.length > 0) {
         seasonCampaigns.forEach((sc) => {
           if (!completedCampaignTitles.has(normalize(sc.title))) {
-            missingCampCount += 1;
-            campaignHasDeficit = true;
             missingObservations.push(`Falta evidencia de campaña: "${sc.title}"`);
           }
         });
-
-        pctCampaigns = Math.round(
-          ((seasonCampaigns.length - missingCampCount) / seasonCampaigns.length) * 100
-        );
       }
 
       allProcessedData.push({
@@ -347,12 +344,10 @@ export default function MissingDeliverablesReportModal({
         pctFotos,
         pctPosts,
         pctVideos,
-        pctCampaigns,
-        pctGeneral,
+        campaignsText,
         photoHasDeficit,
         postHasDeficit,
         videoHasDeficit,
-        campaignHasDeficit,
         missingObservations,
         agreements: agreementsMap[proj.id] || "",
         isSelected: selectedProjectIds.has(proj.id),
@@ -395,10 +390,6 @@ export default function MissingDeliverablesReportModal({
           ? `<span style="color: #dc2626; font-weight: bold; background-color: #fee2e2; padding: 2px 6px; border-radius: 4px;">${item.pctVideos}%</span>`
           : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px;">${item.pctVideos}%</span>`;
 
-        const generalBadge = item.missingObservations.length > 0
-          ? `<span style="color: #dc2626; font-weight: bold; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid #fca5a5;">${item.pctGeneral}%</span>`
-          : `<span style="color: #16a34a; font-weight: bold; background-color: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">${item.pctGeneral}%</span>`;
-
         const obsContent =
           item.missingObservations.length > 0
             ? `<ul style="margin: 0; padding-left: 16px; color: #991b1b;">${item.missingObservations
@@ -419,8 +410,7 @@ export default function MissingDeliverablesReportModal({
             <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">${fotosBadge}</td>
             <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">${postsBadge}</td>
             <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">${videosBadge}</td>
-            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">${item.pctCampaigns}%</td>
-            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">${generalBadge}</td>
+            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #334155;">${item.campaignsText}</td>
             <td style="padding: 10px; border: 1px solid #cbd5e1; vertical-align: top;">${obsContent}</td>
             <td style="padding: 10px; border: 1px solid #cbd5e1; vertical-align: top;">${agreementContent}</td>
           </tr>
@@ -441,8 +431,7 @@ export default function MissingDeliverablesReportModal({
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Fotos</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Posts</th>
               <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Videos</th>
-              <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% Campañas</th>
-              <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">% General</th>
+              <th style="padding: 10px; border: 1px solid #0f172a; text-align: center;">Campañas</th>
               <th style="padding: 10px; border: 1px solid #0f172a;">Observaciones (Detalle de Faltantes)</th>
               <th style="padding: 10px; border: 1px solid #0f172a;">Acuerdos con el Socio</th>
             </tr>
@@ -457,7 +446,7 @@ export default function MissingDeliverablesReportModal({
     const plainText = exportData
       .map(
         (d) =>
-          `* ${d.partnerName} (${d.projectName})\n  - % Fotos: ${d.pctFotos}% | % Posts: ${d.pctPosts}% | % Videos: ${d.pctVideos}% | % General: ${d.pctGeneral}%\n  - Faltantes: ${
+          `* ${d.partnerName} (${d.projectName})\n  - % Fotos: ${d.pctFotos}% | % Posts: ${d.pctPosts}% | % Videos: ${d.pctVideos}% | Campañas: ${d.campaignsText}\n  - Faltantes: ${
             d.missingObservations.length > 0
               ? d.missingObservations.join("; ")
               : "Al día"
@@ -498,8 +487,7 @@ export default function MissingDeliverablesReportModal({
       "Fotos (%)": `${d.pctFotos}%`,
       "Posts (%)": `${d.pctPosts}%`,
       "Videos (%)": `${d.pctVideos}%`,
-      "Campañas (%)": `${d.pctCampaigns}%`,
-      "Cumplimiento General (%)": `${d.pctGeneral}%`,
+      Campañas: d.campaignsText,
       "Detalle de Faltantes": d.missingObservations.join(" | ") || "Al día",
       "Acuerdos con el Socio": d.agreements || "Sin acuerdos",
     }));
@@ -528,7 +516,7 @@ export default function MissingDeliverablesReportModal({
                   Resumen Consolidado de Faltantes y Acuerdos
                 </h2>
                 <p className="text-xs text-gray-300 font-medium">
-                  Filtrado de socios, cálculo entero de avance y registro de acuerdos.
+                  Filtrado de socios, avance mensual y registro de acuerdos.
                 </p>
               </div>
             </div>
@@ -667,10 +655,7 @@ export default function MissingDeliverablesReportModal({
                     % Videos
                   </th>
                   <th className="p-3.5 border-b border-gray-800 text-center min-w-[90px]">
-                    % Campañas
-                  </th>
-                  <th className="p-3.5 border-b border-gray-800 text-center min-w-[90px]">
-                    % General
+                    Campañas
                   </th>
                   <th className="p-3.5 border-b border-gray-800 min-w-[300px]">
                     Observaciones (Detalle de Faltantes)
@@ -683,7 +668,7 @@ export default function MissingDeliverablesReportModal({
               <tbody className="divide-y divide-gray-100">
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-gray-400 font-medium">
+                    <td colSpan={8} className="p-8 text-center text-gray-400 font-medium">
                       No se encontraron socios o proyectos que coincidan con la búsqueda.
                     </td>
                   </tr>
@@ -717,7 +702,7 @@ export default function MissingDeliverablesReportModal({
                           </div>
                         </td>
 
-                        {/* % FOTOS (VERDE SI AL DÍA, ROJO SI HAY DÉFICIT REAL) */}
+                        {/* % FOTOS */}
                         <td className="p-3.5 text-center font-black">
                           {item.photoHasDeficit ? (
                             <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-xs border border-red-200">
@@ -730,7 +715,7 @@ export default function MissingDeliverablesReportModal({
                           )}
                         </td>
 
-                        {/* % POSTS (VERDE SI AL DÍA, ROJO SI HAY DÉFICIT REAL) */}
+                        {/* % POSTS */}
                         <td className="p-3.5 text-center font-black">
                           {item.postHasDeficit ? (
                             <span className="inline-block bg-red-100 text-red-700 px-2 py-0.5 rounded-lg text-xs border border-red-200">
@@ -756,22 +741,11 @@ export default function MissingDeliverablesReportModal({
                           )}
                         </td>
 
-                        {/* % CAMPAÑAS */}
-                        <td className="p-3.5 text-center font-black text-gray-700">
-                          {item.pctCampaigns}%
-                        </td>
-
-                        {/* % GENERAL */}
+                        {/* CAMPAÑAS (FORMATO "X de Y") */}
                         <td className="p-3.5 text-center font-black">
-                          {item.missingObservations.length > 0 ? (
-                            <span className="inline-block bg-amber-50 text-amber-700 px-2.5 py-1 rounded-xl text-xs border border-amber-300 font-extrabold shadow-sm">
-                              {item.pctGeneral}%
-                            </span>
-                          ) : (
-                            <span className="inline-block bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl text-xs border border-emerald-300 font-extrabold">
-                              {item.pctGeneral}%
-                            </span>
-                          )}
+                          <span className="inline-block bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-lg text-xs font-bold border border-slate-200">
+                            {item.campaignsText}
+                          </span>
                         </td>
 
                         {/* OBSERVACIONES / FALTANTES */}
