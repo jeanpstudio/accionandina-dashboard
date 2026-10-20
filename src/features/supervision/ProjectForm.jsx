@@ -262,7 +262,7 @@ export default function ProjectForm() {
     );
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-8 bg-gray-50/20 min-h-screen font-sans">
+    <div className="w-full max-w-4xl mx-auto p-4 md:p-8 bg-gray-50/20 flex-1 min-h-0 font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <button

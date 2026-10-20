@@ -545,51 +545,54 @@ export default function MailingBuilder() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
+    <div className="flex-1 flex flex-col bg-gray-50/30 overflow-hidden font-sans min-h-0">
       {/* HEADER APP: ESTILO UNIFICADO (DASHBOARD MATCH) */}
-      <div className="px-8 py-8 flex justify-between items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 z-20">
+      <div className="px-4 sm:px-8 py-3 sm:py-5 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4 z-20">
         <div>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
-            <Mail className="text-brand" size={32} /> Mailing Lab
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+            <Mail className="text-brand" size={28} /> Mailing Lab
           </h1>
-          <p className="text-gray-500 font-bold text-sm mt-2 ml-1">
+          <p className="text-gray-500 font-bold text-xs sm:text-sm mt-1 ml-1">
             Constructor Modular de Correos
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setPreviewMode("desktop")}
-            className={`p-3 rounded-xl transition-all ${previewMode === "desktop"
-              ? "bg-gray-900 text-white shadow-lg"
-              : "bg-white border border-gray-200 text-gray-400 hover:text-gray-600"
-              }`}
-          >
-            <Monitor size={18} />
-          </button>
-          <button
-            onClick={() => setPreviewMode("mobile")}
-            className={`p-3 rounded-xl transition-all ${previewMode === "mobile"
-              ? "bg-gray-900 text-white shadow-lg"
-              : "bg-white border border-gray-200 text-gray-400 hover:text-gray-600"
-              }`}
-          >
-            <Smartphone size={18} />
-          </button>
-          <div className="h-10 w-px bg-gray-200 mx-2"></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex bg-white border border-gray-200 rounded-xl p-1 shadow-xs">
+            <button
+              onClick={() => setPreviewMode("desktop")}
+              className={`p-2 rounded-lg transition-all ${previewMode === "desktop"
+                ? "bg-gray-900 text-white shadow-xs"
+                : "text-gray-400 hover:text-gray-600"
+                }`}
+              title="Vista Escritorio"
+            >
+              <Monitor size={16} />
+            </button>
+            <button
+              onClick={() => setPreviewMode("mobile")}
+              className={`p-2 rounded-lg transition-all ${previewMode === "mobile"
+                ? "bg-gray-900 text-white shadow-xs"
+                : "text-gray-400 hover:text-gray-600"
+                }`}
+              title="Vista Móvil"
+            >
+              <Smartphone size={16} />
+            </button>
+          </div>
           <button
             onClick={copyVisual}
-            className={`flex items-center gap-2 px-6 py-3 text-xs font-black uppercase tracking-[0.2em] rounded-xl hover:brightness-110 shadow-lg active:scale-95 transition-all ${isCopied ? "bg-emerald-600 text-white" : "bg-brand text-white"
+            className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-xs font-black uppercase tracking-[0.15em] rounded-xl hover:brightness-110 shadow-md active:scale-95 transition-all ${isCopied ? "bg-emerald-600 text-white" : "bg-brand text-white"
               }`}
           >
-            {isCopied ? <Check size={16} /> : <Mail size={16} />}{" "}
+            {isCopied ? <Check size={14} /> : <Mail size={14} />}{" "}
             {isCopied ? "¡Listo!" : "Copiar para Gmail"}
           </button>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
         {/* PANEL IZQUIERDO: CONSTRUCTOR DE BLOQUES */}
-        <aside className="w-[450px] bg-white border-r border-gray-100 flex flex-col h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] relative">
+        <aside className="w-full lg:w-[420px] bg-white border-r border-gray-100 flex flex-col h-auto lg:h-full z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] relative shrink-0">
           {/* Lista de Bloques */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pb-24">
             {enabled && (

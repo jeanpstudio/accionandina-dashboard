@@ -452,14 +452,14 @@ export default function PartnerStories() {
     : stories.length;
 
   return (
-    <div className="max-w-7xl mx-auto p-8 bg-gray-50/30 min-h-screen font-sans">
+    <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-gray-50/30 font-sans flex-1">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 sm:mb-8 gap-4 sm:gap-6">
         <div>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
-            <BookOpen className="text-brand" size={32} /> Gestión de Historias
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+            <BookOpen className="text-brand" size={28} /> Gestión de Historias
           </h1>
-          <p className="text-brand font-bold text-lg mt-1 italic">
+          <p className="text-brand font-bold text-sm sm:text-base mt-1 italic">
             Temporada {selectedSeason}
           </p>
         </div>

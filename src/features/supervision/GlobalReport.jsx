@@ -357,9 +357,9 @@ export default function GlobalReport() {
     );
 
   return (
-    <div className="max-w-[1600px] mx-auto p-8 bg-gray-50/50 min-h-screen font-sans">
+    <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8 bg-gray-50/50 font-sans flex-1">
       {/* HEADER */}
-      <div className="flex flex-col xl:flex-row justify-between items-end mb-8 gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end mb-6 sm:mb-8 gap-4">
         <div>
           <button
             onClick={() => navigate("/supervision")}
@@ -448,7 +448,7 @@ export default function GlobalReport() {
       </div>
 
       {/* FILTROS TABLA */}
-      <div className="flex gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
           <input
@@ -459,18 +459,20 @@ export default function GlobalReport() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button
-          onClick={() => setFilterStatus("activo")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${filterStatus === "activo" ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : "bg-white text-gray-400 border border-gray-100"}`}
-        >
-          Activos
-        </button>
-        <button
-          onClick={() => setFilterStatus("todos")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${filterStatus === "todos" ? "bg-gray-800 text-white" : "bg-white text-gray-400 border border-gray-100"}`}
-        >
-          Todos
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFilterStatus("activo")}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${filterStatus === "activo" ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : "bg-white text-gray-400 border border-gray-100"}`}
+          >
+            Activos
+          </button>
+          <button
+            onClick={() => setFilterStatus("todos")}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${filterStatus === "todos" ? "bg-gray-800 text-white" : "bg-white text-gray-400 border border-gray-100"}`}
+          >
+            Todos
+          </button>
+        </div>
       </div>
 
       {/* TABLA PRINCIPAL */}

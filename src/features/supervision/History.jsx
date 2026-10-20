@@ -802,16 +802,16 @@ export default function History() {
     );
 
   return (
-    <div className="max-w-6xl mx-auto p-10 bg-white min-h-screen">
-      <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
+    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 md:p-10 bg-white flex-1 min-h-0 font-sans">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 sm:mb-8 gap-4 sm:gap-6">
         <div>
           <button
             onClick={() => navigate("/supervision")}
-            className="flex items-center gap-2 text-gray-400 hover:text-brand font-bold text-xs mb-4 uppercase tracking-widest transition-all"
+            className="flex items-center gap-2 text-gray-400 hover:text-brand font-bold text-xs mb-3 sm:mb-4 uppercase tracking-widest transition-all"
           >
             <ArrowLeft size={16} /> REGRESAR
           </button>
-          <h1 className="text-5xl font-black text-gray-900 tracking-tighter uppercase leading-none">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-gray-900 tracking-tighter uppercase leading-none">
             Historial
           </h1>
           <p className="text-brand font-bold text-lg mt-1">

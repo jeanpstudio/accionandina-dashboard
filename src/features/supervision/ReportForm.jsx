@@ -687,7 +687,7 @@ export default function ReportForm({ isViewMode = false }) {
     );
 
   return (
-    <div className="max-w-[1500px] mx-auto p-4 md:p-6 bg-gray-50/20 min-h-screen font-sans">
+    <div className="w-full max-w-[1500px] mx-auto p-4 md:p-6 bg-gray-50/20 flex-1 min-h-0 font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <button

@@ -224,7 +224,7 @@ export default function AdminDashboard() {
     );
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
+    <div className="flex-1 flex flex-col bg-gray-50/30 overflow-hidden font-sans min-h-0">
       {/* HEADER */}
       <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col md:flex-row justify-between items-start md:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
         <div>

@@ -4,7 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dashboard-aa-comms</title>
+    <title>Acción Andina - Hub de Comunicaciones</title>
+    <script>
+      try {
+        var s = localStorage.getItem('aa_dashboard_text_scale');
+        if (s) {
+          var p = parseInt(s, 10);
+          if (p >= 75 && p <= 150) {
+            document.documentElement.style.fontSize = p + '%';
+            document.documentElement.setAttribute('data-text-scale', p);
+          }
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

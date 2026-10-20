@@ -538,22 +538,22 @@ export default function HomeDashboard() {
     );
 
   return (
-    <div className="h-screen bg-gray-50/30 overflow-y-auto custom-scrollbar p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 font-sans">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         {/* HEADER & KPI */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="col-span-2 flex flex-col justify-center">
-            <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter mb-2">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
+          <div className="xl:col-span-2 flex flex-col justify-center">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter mb-2">
               Panel de Control
             </h1>
-            <p className="text-lg text-gray-500 font-medium flex items-center gap-2">
+            <p className="text-sm sm:text-base md:text-lg text-gray-500 font-medium flex flex-wrap items-center gap-2">
               Resumen operativo al{" "}
               <span className="text-brand font-bold">
                 {new Date().toLocaleDateString()}
               </span>
               .
               {isReadOnly && (
-                <span className="ml-2 bg-gray-200 text-gray-500 px-2 py-1 rounded-md text-[10px] flex items-center gap-1">
+                <span className="bg-gray-200 text-gray-500 px-2 py-1 rounded-md text-[10px] flex items-center gap-1 font-bold">
                   <Lock size={10} /> SOLO LECTURA
                 </span>
               )}
@@ -586,10 +586,10 @@ export default function HomeDashboard() {
           </div>
         </div>
 
-        {/* GRID PRINCIPAL */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-auto lg:h-[500px]">
+        {/* GRID PRINCIPAL: 5/12 Mis Pendientes + 7/12 Auditoría */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 min-h-[480px]">
           {/* 1. TAREAS (SECCIÓN BLINDADA) */}
-          <div className="flex flex-col gap-8">
+          <div className="lg:col-span-5 flex flex-col gap-8 min-h-[440px]">
             <div className="flex-1 bg-gray-900 p-6 md:p-8 rounded-[40px] shadow-lg flex flex-col relative overflow-hidden text-white group">
               <div className="flex justify-between items-center mb-6 z-10">
                 <h2 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
@@ -666,7 +666,7 @@ export default function HomeDashboard() {
           </div>
 
           {/* 2. AUDITORÍA */}
-          <div className="bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500">
+          <div className="lg:col-span-7 bg-white p-6 md:p-8 rounded-[40px] border border-gray-100 shadow-sm flex flex-col relative overflow-hidden group hover:shadow-xl transition-all duration-500 min-h-[440px]">
             <div className="flex justify-between items-center mb-6 z-10">
               <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
                 <AlertTriangle className="text-red-500" size={20} /> Auditoría

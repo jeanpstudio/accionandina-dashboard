@@ -939,14 +939,14 @@ export default function Supervision() {
 
   // --- RENDERIZADO DEL DASHBOARD ---
   return (
-    <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
+    <div className="flex-1 flex flex-col bg-gray-50/30 overflow-hidden font-sans min-h-0">
       {/* 
           BARRA DE NAVEGACIÓN SUPERIOR (HEADER)
           Contiene el título dinámico y las acciones rápidas (Configuración, Reportes, Creación).
       */}
-      <div className="px-4 md:px-8 py-4 md:py-6 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
+      <div className="px-4 md:px-8 py-3 md:py-5 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
         <div>
-          <h1 className="text-2xl md:text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
             <Eye className="text-brand" size={24} md:size={32} /> Supervision
           </h1>
           <p className="text-brand font-bold text-lg mt-1 italic flex items-center gap-2">
@@ -1064,31 +1064,31 @@ export default function Supervision() {
           {!isReadOnly && (
             <button
               onClick={() => setIsSettingsModalOpen(true)}
-              className="bg-white border border-gray-200 text-gray-600 px-5 py-3 rounded-2xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm ml-2"
+              className="bg-white border border-gray-200 text-gray-700 px-3.5 py-2 sm:py-2.5 rounded-xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider shadow-sm"
             >
-              <Settings size={16} /> Config. Temporada
+              <Settings size={14} /> Config. Temporada
             </button>
           )}
 
           <button
             onClick={() => setIsMissingModalOpen(true)}
-            className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3 rounded-2xl font-black hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
+            className="bg-amber-50 border border-amber-200 text-amber-800 px-3.5 py-2 sm:py-2.5 rounded-xl font-black hover:bg-amber-100 transition-all flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider shadow-sm"
           >
-            <AlertTriangle size={16} className="text-amber-600" /> Resumen de Faltantes
+            <AlertTriangle size={14} className="text-amber-600" /> Faltantes
           </button>
 
           <button
             onClick={() => setIsVideoReportModalOpen(true)}
-            className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-5 py-3 rounded-2xl font-black hover:bg-indigo-100 hover:border-indigo-300 transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
+            className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-3.5 py-2 sm:py-2.5 rounded-xl font-black hover:bg-indigo-100 transition-all flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider shadow-sm"
           >
-            <Video size={16} className="text-indigo-600" /> Reporte de Videos
+            <Video size={14} className="text-indigo-600" /> Videos
           </button>
 
           <button
             onClick={() => navigate("/global-report")}
-            className="bg-white border border-gray-200 text-gray-600 px-5 py-3 rounded-2xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-2 text-xs uppercase tracking-[0.1em] shadow-sm"
+            className="bg-white border border-gray-200 text-gray-700 px-3.5 py-2 sm:py-2.5 rounded-xl font-black hover:border-brand hover:text-brand transition-all flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider shadow-sm"
           >
-            <BarChart3 size={16} /> Reporte Global
+            <BarChart3 size={14} /> Reporte Global
           </button>
 
           {/* BOTONES DE CREACIÓN: Se adaptan según la pestaña activa */}
@@ -1096,16 +1096,16 @@ export default function Supervision() {
             (activeTab === "partners" ? (
               <button
                 onClick={() => navigate("/new-partner")}
-                className="flex items-center gap-2 bg-brand text-white px-6 py-3 rounded-2xl font-black hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 text-xs uppercase tracking-[0.2em]"
+                className="flex items-center gap-1.5 bg-brand text-white px-4 py-2 sm:py-2.5 rounded-xl font-black hover:brightness-110 transition-all shadow-md hover:shadow-lg active:scale-95 text-[10px] sm:text-xs uppercase tracking-wider"
               >
-                <Plus size={16} /> Nuevo Socio
+                <Plus size={14} /> Nuevo Socio
               </button>
             ) : (
               <button
                 onClick={() => setIsUserModalOpen(true)}
-                className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-2xl font-black hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 text-xs uppercase tracking-[0.2em]"
+                className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 sm:py-2.5 rounded-xl font-black hover:brightness-110 transition-all shadow-md hover:shadow-lg active:scale-95 text-[10px] sm:text-xs uppercase tracking-wider"
               >
-                <UserPlus size={16} /> Nuevo Usuario
+                <UserPlus size={14} /> Nuevo Usuario
               </button>
             ))}
         </div>
@@ -1168,7 +1168,7 @@ export default function Supervision() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
                   {filteredPartners.map((partner) => {
                     const dynamicEmail = getPartnerEmail(partner.id);
                     const hasUser = dynamicEmail.includes("@");

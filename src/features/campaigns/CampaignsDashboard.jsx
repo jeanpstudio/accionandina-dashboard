@@ -260,7 +260,7 @@ export default function CampaignsDashboard() {
   ];
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50/30 font-sans relative">
+    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/30 font-sans relative min-h-0">
       {/* 1. KANBAN SUPERIOR */}
       <div className="h-[45vh] lg:h-[35vh] min-h-[300px] lg:min-h-[250px] border-b border-gray-200 bg-gray-50/30 flex flex-col relative">
         <div className="px-4 md:px-8 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">

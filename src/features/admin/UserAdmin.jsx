@@ -263,7 +263,7 @@ export default function UserAdmin() {
     );
 
   return (
-    <div className="max-w-[1600px] mx-auto p-4 md:p-6 bg-gray-50/20 min-h-screen font-sans">
+    <div className="w-full max-w-[1600px] mx-auto p-4 md:p-6 bg-gray-50/20 font-sans flex-1">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 uppercase flex items-center gap-3">

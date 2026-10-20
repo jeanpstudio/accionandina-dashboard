@@ -371,12 +371,12 @@ export default function MeetingsDashboard() {
     );
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50/30 overflow-hidden font-sans">
+    <div className="flex-1 flex flex-col bg-gray-50/30 overflow-hidden font-sans min-h-0">
       {/* HEADER */}
-      <div className="px-8 py-6 flex justify-between items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0">
+      <div className="px-4 sm:px-8 py-3 sm:py-5 flex flex-col sm:flex-row justify-between items-start sm:items-end bg-white/80 backdrop-blur-sm border-b border-gray-100 shrink-0 gap-4">
         <div>
-          <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
-            <Calendar className="text-brand" size={32} /> Meeting Room
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 uppercase tracking-tighter leading-none flex items-center gap-3">
+            <Calendar className="text-brand" size={28} /> Meeting Room
           </h1>
           <p className="text-brand font-bold text-lg mt-1 italic flex items-center gap-2">
             Coordinación & Acuerdos
