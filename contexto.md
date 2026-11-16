@@ -99,6 +99,21 @@ Es el núcleo técnico de cumplimiento para las metas de comunicaciones.
     *   Define las metas mensuales requeridas de fotos y posts.
     *   **Productos Manuales (Override)**: Permite anular las reglas globales de la temporada para ese proyecto en específico, habilitando la selección de meses de video y campañas con rangos de meses personalizados.
 
+### B. Módulo de Productividad y Tareas Personales (`src/features/admin/` y `src/components/tabs/`)
+Sistema de gestión personal enfocado en "Foco Mensual" (`monthKey`), dividido en tres pestañas: Plan (`PlanningTab`), Ejecución (`ExecutionTab`) y Cierre (`ReportTab`).
+
+#### 1. Planificación Semanal (`PlanningTab.jsx`)
+*   **Gestión Semanal y Backlog**: Distribución de tareas por semanas visuales del mes actual y arrastre automático de tareas pendientes de meses anteriores (Backlog).
+*   **Carga Masiva («Pegar Lista»)**:
+    *   Modal para pegar listas de tareas directamente desde fuentes externas (apuntes, WhatsApp, correos).
+    *   Parser inteligente con expresiones regulares que limpia guiones (`-`, `–`, `—`), viñetas (`•`, `*`) y numeraciones (`1. `, `1) `), omitiendo saltos de línea vacíos.
+    *   Asignación automática a la semana actual del mes en curso y al `month_key` activo, con prioridad P2 por defecto.
+    *   Vista previa en tiempo real del lote a importar.
+*   **Autocompletado y Detección de Similitud / Duplicados**:
+    *   *En ingreso manual*: Despliega sugerencias inteligentes basadas en tareas existentes mientras se escribe y alerta si ya existe una tarea idéntica o similar registrada en el mes.
+    *   *En carga masiva*: Identifica y resalta en color ámbar las tareas del lote que ya existen, ofreciendo botones para excluir duplicadas con un clic o excluirlas/restaurarlas individualmente antes de la inserción en Supabase.
+*   **Exportación HTML para Google Docs/Sheets**: Generador de resumen semanal en formato tabla HTML listo para copiar y pegar en portapapeles.
+
 ---
 
 ## 5. Esquema de Base de Datos (Tablas Clave de Supabase)
@@ -187,9 +202,36 @@ Es el núcleo técnico de cumplimiento para las metas de comunicaciones.
 *   `custom_campaign_requirements` (jsonb) -> Campañas personalizadas
 *   `status` (text) -> Estado en esta temporada ('activo', 'pausado', 'cerrado')
 
+### Tareas Personales y Productividad (`personal_tasks`)
+*   `id` (uuid, PK)
+*   `description` (text) -> Título o detalle de la actividad
+*   `category` (text) -> Categoría organizacional (ej. "Legal", "Comunicaciones")
+*   `priority` (integer) -> Prioridad de 1 (alta) a 3 (baja)
+*   `target_week` (integer) -> Semana asignada del mes (1 a 5)
+*   `month_key` (text) -> Clave del mes asignado (Formato `AAAA-MM`)
+*   `status` (text) -> 'PENDIENTE', 'EN_PROGRESO', 'COMPLETADO'
+*   `progress` (integer) -> Porcentaje de avance (0 a 100)
+*   `subtasks` (jsonb) -> Lista de subtareas/hitos `[{id, text, completed, completed_at}]`
+*   `resource_link` (text) -> Enlace de documento o recurso asociado
+*   `start_date` / `end_date` (date) -> Rango opcional de ejecución de la tarea
+
+### Categorías Personales (`personal_categories`)
+*   `id` (uuid, PK)
+*   `name` (text) -> Nombre de la categoría
+*   `created_at` (timestamp)
+
 ---
 
 ## 6. Historial de Cambios y Mejoras del Proyecto
+
+### [2026-11-16] Carga Masiva, Autocompletado y Detección de Duplicados en Tareas (PlanningTab)
+*   **PlanningTab.jsx**:
+    *   **Carga Masiva («Pegar Lista»)**: Se agregó un nuevo modal de importación que procesa texto pegado reconociendo saltos de línea y limpiando prefijos de viñetas (`-`, `•`, `*`, `–`, `—`) y listas numeradas (`1. `, `1) `). Asigna las tareas automáticamente a la semana actual del mes en curso y al `month_key` visualizado, fijando por defecto la prioridad en P2.
+    *   **Autocompletado Inteligente**: Al escribir en el campo de descripción del formulario de nueva actividad manual, se despliega un catálogo de sugerencias en vivo con tareas existentes o recurrentes del mes/histórico, autocompletando la descripción y su categoría con un solo clic.
+    *   **Detección de Duplicados / Similitud**:
+        *   *En creación manual*: Advierte inmediatamente debajo del campo si ya existe una tarea idéntica o similar en el mes/backlog (`⚠️ Ya existe en Semana X: "..."`).
+        *   *En carga masiva*: Analiza cada tarea del lote en tiempo real contra las tareas del mes, resaltando las posibles duplicadas en color ámbar (`⚠️ Ya en Sem. X`). Permite excluirlas todas con un botón («Excluir existentes») o excluirlas/incluirlas de forma individual antes de la inserción masiva en Supabase.
+*   **Compatibilidad y Estabilidad**: El ingreso manual y las funciones previas (resumen, categorías, drag & drop) se mantuvieron intactas. Se verificó la compilación limpia con Vite y se subieron los cambios a `origin/main`.
 
 ### [2026-06-23] Estado Inicial de Contexto
 *   Creación del archivo `contexto.md` para asentar la lógica operativa actual y base de datos.
