@@ -28,6 +28,8 @@ import {
   Search,
   Check,
   ExternalLink,
+  ListPlus,
+  Loader2,
 } from "lucide-react";
 
 export default function PlanningTab({
@@ -51,6 +53,14 @@ export default function PlanningTab({
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
   // Subtareas en la modal de edición
   const [newSubtaskText, setNewSubtaskText] = useState("");
+
+  // Estados para Carga Masiva (Pegar Lista)
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [batchText, setBatchText] = useState("");
+  const [batchPriority, setBatchPriority] = useState(2); // Por defecto prioridad dos
+  const [batchWeek, setBatchWeek] = useState(1);
+  const [batchCategory, setBatchCategory] = useState("");
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
 
   // Estado para Resumen Semanal
   const [summaryOptions, setSummaryOptions] = useState({
@@ -177,6 +187,78 @@ export default function PlanningTab({
 
     return () => clearTimeout(delayDebounce);
   }, [taskSearch, monthKey]);
+
+  // --- HELPER SEMANA Y PARSER DE TAREAS ---
+  const getCurrentWeekNumber = () => {
+    const now = new Date();
+    const realCurrentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    if (monthKey === realCurrentMonthKey) {
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+      const calcWeek = Math.ceil((now.getDate() + firstDayOfMonth) / 7);
+      return Math.min(Math.max(calcWeek, 1), totalWeeks || 5);
+    }
+    return 1;
+  };
+
+  const parseTasksFromText = (text) => {
+    if (!text) return [];
+    return text
+      .split(/\r?\n/)
+      .map((line) => {
+        // Elimina prefijos comunes: -, *, •, –, —, números seguidos de punto o paréntesis (ej. "1. ", "2) ", "1.- ")
+        let clean = line.replace(/^\s*([•·\-*–—]|\d+[\.\)\-–])\s*/, "").trim();
+        // Limpia cualquier otro guión o espacio remanente al inicio
+        clean = clean.replace(/^[-*•·–—\s]+/, "").trim();
+        return clean;
+      })
+      .filter((line) => line.length > 0);
+  };
+
+  const handleOpenBatchModal = () => {
+    setBatchWeek(getCurrentWeekNumber());
+    setBatchPriority(2); // Por defecto prioridad dos según requerimiento
+    setBatchCategory(newTask.category || "");
+    setBatchText("");
+    setIsBatchModalOpen(true);
+  };
+
+  const handleSaveBatchTasks = async () => {
+    const taskList = parseTasksFromText(batchText);
+    if (taskList.length === 0) {
+      alert("Por favor pega o escribe al menos una tarea.");
+      return;
+    }
+
+    setIsSavingBatch(true);
+    try {
+      const payload = taskList.map((desc) => ({
+        description: desc,
+        priority: batchPriority,
+        target_week: batchWeek,
+        month_key: monthKey,
+        category: batchCategory || null,
+        status: "PENDIENTE",
+        progress: 0,
+      }));
+
+      const { error } = await supabase.from("personal_tasks").insert(payload);
+
+      if (error) {
+        console.error("[handleSaveBatchTasks] Error al guardar tareas:", error);
+        alert("Error al importar tareas: " + error.message);
+      } else {
+        setBatchText("");
+        setIsBatchModalOpen(false);
+        onUpdate();
+      }
+    } catch (err) {
+      console.error("[handleSaveBatchTasks] Error inesperado:", err);
+      alert("Error inesperado al importar las tareas.");
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
 
   // --- HANDLERS BASE DE DATOS ---
   const handleSaveTask = async () => {
@@ -512,7 +594,14 @@ export default function PlanningTab({
           <h3 className="text-3xl font-black text-gray-900 uppercase tracking-tighter flex items-center gap-3">
             <Plus className="text-brand" size={28} /> Nueva Actividad
           </h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleOpenBatchModal}
+              className="flex items-center gap-2 text-[10px] font-bold uppercase bg-brand/10 text-brand border border-brand/20 px-3 py-2 rounded-lg hover:bg-brand/20 transition-all hover:scale-105 active:scale-95 shadow-xs"
+              title="Pegar lista de tareas detectando guiones y saltos de línea"
+            >
+              <ListPlus size={14} /> Pegar Lista
+            </button>
             <button
               onClick={() => setIsSummaryModalOpen(true)}
               className="flex items-center gap-2 text-[10px] font-bold uppercase bg-emerald-50 text-emerald-600 border border-emerald-100 px-3 py-2 rounded-lg hover:bg-emerald-100 transition-colors"
@@ -1394,6 +1483,184 @@ export default function PlanningTab({
             >
               <ClipboardCopy size={20} /> Copiar al Portapapeles
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* (MODAL CARGA MASIVA / PEGAR LISTA DE TAREAS) */}
+      {isBatchModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in zoom-in-95">
+          <div className="bg-white rounded-[32px] shadow-2xl p-6 md:p-8 max-w-2xl w-full border border-gray-100 relative max-h-[90vh] flex flex-col">
+            <button
+              onClick={() => !isSavingBatch && setIsBatchModalOpen(false)}
+              className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 transition-colors"
+              title="Cerrar modal"
+            >
+              <X size={24} />
+            </button>
+
+            {/* Header del Modal */}
+            <div className="flex items-center gap-3 mb-6 shrink-0">
+              <div className="bg-brand/10 text-brand p-3 rounded-2xl">
+                <ListPlus size={28} />
+              </div>
+              <div>
+                <h2 className="text-xl md:text-2xl font-black text-gray-900 uppercase tracking-tight">
+                  Pegar Lista de Tareas
+                </h2>
+                <p className="text-xs md:text-sm font-bold text-gray-400">
+                  Detecta automáticamente guiones, viñetas y saltos de línea
+                </p>
+              </div>
+            </div>
+
+            {/* Contenedor scrolleable */}
+            <div className="space-y-4 overflow-y-auto custom-scrollbar pr-1 flex-1">
+              {/* Controles de Configuración rápida para el lote */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Semana Destino
+                  </label>
+                  <select
+                    className="w-full bg-white p-2.5 rounded-xl text-xs font-bold outline-none uppercase text-gray-700 border border-gray-200"
+                    value={batchWeek}
+                    onChange={(e) => setBatchWeek(parseInt(e.target.value))}
+                  >
+                    {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((w) => (
+                      <option key={w} value={w}>
+                        Semana {w} {w === getCurrentWeekNumber() ? "(Actual)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Prioridad por Defecto
+                  </label>
+                  <div className="flex bg-white p-1 rounded-xl border border-gray-200">
+                    {[1, 2, 3].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setBatchPriority(p)}
+                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+                          batchPriority === p
+                            ? `${getPriorityColor(p)} shadow-xs font-black`
+                            : "text-gray-400 hover:text-gray-600"
+                        }`}
+                      >
+                        P{p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                    Categoría (Opcional)
+                  </label>
+                  <select
+                    className="w-full bg-white p-2.5 rounded-xl text-xs font-bold outline-none uppercase text-gray-700 border border-gray-200"
+                    value={batchCategory}
+                    onChange={(e) => setBatchCategory(e.target.value)}
+                  >
+                    <option value="">Sin Categoría</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Textarea para pegar la lista */}
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">
+                  Lista de Tareas (pega el texto aquí)
+                </label>
+                <textarea
+                  rows={6}
+                  value={batchText}
+                  onChange={(e) => setBatchText(e.target.value)}
+                  placeholder={`- Elaborar informe semanal de redes\n- Coordinar reunión con el equipo de diseño\n- Subir videos a Google Drive\n- Revisar métricas mensuales`}
+                  className="w-full bg-gray-50 p-4 rounded-2xl text-xs md:text-sm font-medium text-gray-800 outline-none border-2 border-transparent focus:border-brand focus:bg-white transition-all placeholder:text-gray-400 resize-none font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {/* Vista Previa de tareas detectadas en tiempo real */}
+              {parseTasksFromText(batchText).length > 0 && (
+                <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 size={13} className="text-emerald-600" />
+                      {parseTasksFromText(batchText).length} Tareas Detectadas
+                    </span>
+                    <span className="text-[9px] font-bold text-emerald-700">
+                      Semana {batchWeek} • {monthKey} • P{batchPriority}
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                    {parseTasksFromText(batchText).map((taskDesc, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-emerald-100 text-xs font-semibold text-gray-700 shadow-2xs"
+                      >
+                        <span className="text-[9px] font-black text-emerald-600 w-5">
+                          #{idx + 1}
+                        </span>
+                        <span className="truncate flex-1">{taskDesc}</span>
+                        <span
+                          className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase border ${getPriorityColor(
+                            batchPriority
+                          )}`}
+                        >
+                          P{batchPriority}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer con botones de acción */}
+            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBatchModalOpen(false)}
+                disabled={isSavingBatch}
+                className="px-5 py-3 rounded-2xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors uppercase tracking-wider"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveBatchTasks}
+                disabled={isSavingBatch || parseTasksFromText(batchText).length === 0}
+                className={`px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest text-white flex items-center gap-2 shadow-lg transition-all ${
+                  isSavingBatch || parseTasksFromText(batchText).length === 0
+                    ? "bg-gray-300 cursor-not-allowed shadow-none"
+                    : "bg-gray-900 hover:bg-black hover:scale-102 active:scale-98 shadow-gray-900/20"
+                }`}
+              >
+                {isSavingBatch ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Agregando...
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    {parseTasksFromText(batchText).length > 0
+                      ? `Agregar ${parseTasksFromText(batchText).length} Tareas`
+                      : "Agregar Tareas"}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
