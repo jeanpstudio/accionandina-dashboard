@@ -30,6 +30,8 @@ import {
   ExternalLink,
   ListPlus,
   Loader2,
+  AlertTriangle,
+  History,
 } from "lucide-react";
 
 export default function PlanningTab({
@@ -61,6 +63,10 @@ export default function PlanningTab({
   const [batchWeek, setBatchWeek] = useState(1);
   const [batchCategory, setBatchCategory] = useState("");
   const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [excludedBatchIndices, setExcludedBatchIndices] = useState(new Set());
+
+  // Estado para autocompletado de descripción
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Estado para Resumen Semanal
   const [summaryOptions, setSummaryOptions] = useState({
@@ -215,24 +221,101 @@ export default function PlanningTab({
       .filter((line) => line.length > 0);
   };
 
+  // --- NORMALIZACIÓN Y DETECCIÓN DE SIMILITUD / DUPLICADOS ---
+  const normalizeText = (str) => {
+    if (!str) return "";
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"'«»]/g, "")
+      .trim()
+      .replace(/\s+/g, " ");
+  };
+
+  const findSimilarTask = (description, taskList = tasks) => {
+    const norm = normalizeText(description);
+    if (!norm || norm.length < 3) return null;
+
+    return (
+      taskList.find((t) => {
+        const tNorm = normalizeText(t.description);
+        if (!tNorm) return false;
+        if (tNorm === norm) return true;
+        if (norm.length >= 6 && tNorm.length >= 6) {
+          if (tNorm.includes(norm) || norm.includes(tNorm)) return true;
+        }
+        return false;
+      }) || null
+    );
+  };
+
+  const getTaskSuggestions = (query, taskList = tasks) => {
+    const normQuery = normalizeText(query);
+    if (!normQuery || normQuery.length < 2) return [];
+
+    const seen = new Set();
+    const results = [];
+    const combined = [...taskList, ...(globalTasks || [])];
+
+    for (const t of combined) {
+      if (!t.description) continue;
+      const normDesc = normalizeText(t.description);
+      if (normDesc.includes(normQuery)) {
+        if (!seen.has(normDesc)) {
+          seen.add(normDesc);
+          results.push(t);
+          if (results.length >= 6) break;
+        }
+      }
+    }
+    return results;
+  };
+
+  const toggleExcludeBatchTask = (idx) => {
+    setExcludedBatchIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const excludeAllDuplicates = (parsedList) => {
+    const dupIndices = new Set();
+    parsedList.forEach((desc, idx) => {
+      if (findSimilarTask(desc, tasks)) {
+        dupIndices.add(idx);
+      }
+    });
+    setExcludedBatchIndices(dupIndices);
+  };
+
+  const includeAllBatch = () => {
+    setExcludedBatchIndices(new Set());
+  };
+
   const handleOpenBatchModal = () => {
     setBatchWeek(getCurrentWeekNumber());
     setBatchPriority(2); // Por defecto prioridad dos según requerimiento
     setBatchCategory(newTask.category || "");
     setBatchText("");
+    setExcludedBatchIndices(new Set());
     setIsBatchModalOpen(true);
   };
 
   const handleSaveBatchTasks = async () => {
-    const taskList = parseTasksFromText(batchText);
-    if (taskList.length === 0) {
-      alert("Por favor pega o escribe al menos una tarea.");
+    const parsedList = parseTasksFromText(batchText);
+    const validTasks = parsedList.filter((_, idx) => !excludedBatchIndices.has(idx));
+
+    if (validTasks.length === 0) {
+      alert("No hay tareas seleccionadas para agregar.");
       return;
     }
 
     setIsSavingBatch(true);
     try {
-      const payload = taskList.map((desc) => ({
+      const payload = validTasks.map((desc) => ({
         description: desc,
         priority: batchPriority,
         target_week: batchWeek,
@@ -249,6 +332,7 @@ export default function PlanningTab({
         alert("Error al importar tareas: " + error.message);
       } else {
         setBatchText("");
+        setExcludedBatchIndices(new Set());
         setIsBatchModalOpen(false);
         onUpdate();
       }
@@ -618,19 +702,82 @@ export default function PlanningTab({
         </div>
 
         <div className="grid grid-cols-12 gap-4 items-end">
-          <div className="col-span-12 md:col-span-4">
+          <div className="col-span-12 md:col-span-4 relative">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
               Descripción
             </label>
-            <input
-              type="text"
-              className="w-full bg-gray-50 p-4 rounded-2xl font-bold text-gray-800 outline-none focus:bg-white focus:ring-2 focus:ring-brand/20 transition-all border-2 border-transparent focus:border-brand"
-              value={newTask.description}
-              onChange={(e) =>
-                setNewTask({ ...newTask, description: e.target.value })
-              }
-              placeholder="Ej: Redactar informe..."
-            />
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full bg-gray-50 p-4 rounded-2xl font-bold text-gray-800 outline-none focus:bg-white focus:ring-2 focus:ring-brand/20 transition-all border-2 border-transparent focus:border-brand"
+                value={newTask.description}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
+                onChange={(e) =>
+                  setNewTask({ ...newTask, description: e.target.value })
+                }
+                placeholder="Ej: Redactar informe..."
+              />
+              {/* Dropdown de Sugerencias / Autocompletado */}
+              {showSuggestions && getTaskSuggestions(newTask.description, tasks).length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 max-h-56 overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center justify-between px-2.5 py-1 text-[9px] font-black uppercase text-gray-400 tracking-wider border-b border-gray-100 pb-1 mb-1">
+                    <span className="flex items-center gap-1">
+                      <History size={11} className="text-brand" /> Tareas Existentes / Sugerencias
+                    </span>
+                    <span>{getTaskSuggestions(newTask.description, tasks).length} sugerencia(s)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {getTaskSuggestions(newTask.description, tasks).map((sug, i) => (
+                      <button
+                        key={sug.id || i}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setNewTask({
+                            ...newTask,
+                            description: sug.description,
+                            category: sug.category || newTask.category,
+                          });
+                          setShowSuggestions(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl hover:bg-brand/10 hover:text-brand transition-colors text-xs font-medium text-gray-700 flex items-center justify-between gap-2 group"
+                      >
+                        <span className="truncate flex-1 font-bold group-hover:text-brand">
+                          {sug.description}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {sug.target_week && (
+                            <span className="text-[9px] font-black uppercase bg-gray-100 group-hover:bg-brand/20 text-gray-500 group-hover:text-brand px-1.5 py-0.5 rounded">
+                              Sem. {sug.target_week}
+                            </span>
+                          )}
+                          {sug.category && (
+                            <span className="text-[9px] font-black uppercase bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">
+                              {sug.category}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Alerta de Similitud / Posible Duplicada */}
+            {(() => {
+              const similar = findSimilarTask(newTask.description, tasks);
+              if (!similar) return null;
+              return (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1.5 rounded-xl animate-in fade-in">
+                  <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+                  <span className="truncate">
+                    Ya existe en Semana {similar.target_week || 1}: "{similar.description}" ({similar.status || "PENDIENTE"})
+                  </span>
+                </div>
+              );
+            })()}
           </div>
           <div className="col-span-6 md:col-span-2">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
@@ -1592,39 +1739,117 @@ export default function PlanningTab({
               </div>
 
               {/* Vista Previa de tareas detectadas en tiempo real */}
-              {parseTasksFromText(batchText).length > 0 && (
-                <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <CheckCircle2 size={13} className="text-emerald-600" />
-                      {parseTasksFromText(batchText).length} Tareas Detectadas
-                    </span>
-                    <span className="text-[9px] font-bold text-emerald-700">
-                      Semana {batchWeek} • {monthKey} • P{batchPriority}
-                    </span>
-                  </div>
-                  <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
-                    {parseTasksFromText(batchText).map((taskDesc, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-emerald-100 text-xs font-semibold text-gray-700 shadow-2xs"
-                      >
-                        <span className="text-[9px] font-black text-emerald-600 w-5">
-                          #{idx + 1}
+              {(() => {
+                const parsedList = parseTasksFromText(batchText);
+                if (parsedList.length === 0) return null;
+
+                const dupIndices = parsedList
+                  .map((taskDesc, idx) => ({ idx, isDup: !!findSimilarTask(taskDesc, tasks) }))
+                  .filter((x) => x.isDup)
+                  .map((x) => x.idx);
+                const dupCount = dupIndices.length;
+                const activeCount = parsedList.filter((_, idx) => !excludedBatchIndices.has(idx)).length;
+
+                return (
+                  <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3.5 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 size={13} className="text-emerald-600" />
+                          {activeCount} de {parsedList.length} Tareas a Agregar
                         </span>
-                        <span className="truncate flex-1">{taskDesc}</span>
-                        <span
-                          className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase border ${getPriorityColor(
-                            batchPriority
-                          )}`}
-                        >
-                          P{batchPriority}
-                        </span>
+                        {dupCount > 0 && (
+                          <span className="bg-amber-100 text-amber-800 border border-amber-300/80 px-2 py-0.5 rounded-md text-[9px] font-black uppercase flex items-center gap-1 animate-pulse">
+                            <AlertTriangle size={11} /> {dupCount} posiblemente existente(s)
+                          </span>
+                        )}
                       </div>
-                    ))}
+
+                      {/* Botones de acción rápida sobre duplicadas */}
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold">
+                        {dupCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => excludeAllDuplicates(parsedList)}
+                            className="bg-amber-200/70 hover:bg-amber-200 text-amber-900 px-2 py-1 rounded-lg uppercase tracking-wider transition-colors"
+                          >
+                            Excluir existentes
+                          </button>
+                        )}
+                        {excludedBatchIndices.size > 0 && (
+                          <button
+                            type="button"
+                            onClick={includeAllBatch}
+                            className="bg-white hover:bg-gray-100 text-gray-600 px-2 py-1 rounded-lg uppercase tracking-wider transition-colors border border-gray-200"
+                          >
+                            Restaurar todas
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="max-h-44 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                      {parsedList.map((taskDesc, idx) => {
+                        const matched = findSimilarTask(taskDesc, tasks);
+                        const isExcluded = excludedBatchIndices.has(idx);
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+                              isExcluded
+                                ? "bg-gray-100/80 border-gray-200 text-gray-400 opacity-60 line-through"
+                                : matched
+                                ? "bg-amber-50/90 border-amber-200 text-gray-800 shadow-2xs"
+                                : "bg-white border-emerald-100 text-gray-700 shadow-2xs"
+                            }`}
+                          >
+                            <span className="text-[9px] font-black text-gray-400 w-5">
+                              #{idx + 1}
+                            </span>
+                            <span className="truncate flex-1 font-medium">{taskDesc}</span>
+
+                            {/* Badge de Duplicada/Existente */}
+                            {!isExcluded && matched && (
+                              <span
+                                className="text-[8px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300/60 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"
+                                title={`Coincide con: "${matched.description}"`}
+                              >
+                                <AlertTriangle size={10} /> Ya en Sem. {matched.target_week || 1}
+                              </span>
+                            )}
+
+                            {/* Badge de Prioridad */}
+                            {!isExcluded && (
+                              <span
+                                className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase border shrink-0 ${getPriorityColor(
+                                  batchPriority
+                                )}`}
+                              >
+                                P{batchPriority}
+                              </span>
+                            )}
+
+                            {/* Botón Excluir/Incluir */}
+                            <button
+                              type="button"
+                              onClick={() => toggleExcludeBatchTask(idx)}
+                              className={`p-1 rounded-md transition-colors ${
+                                isExcluded
+                                  ? "text-brand hover:bg-brand/10 font-black text-[9px] uppercase px-1.5"
+                                  : "text-gray-300 hover:text-red-500 hover:bg-red-50"
+                              }`}
+                              title={isExcluded ? "Volver a incluir tarea" : "Excluir tarea de la lista"}
+                            >
+                              {isExcluded ? "Incluir" : <X size={13} />}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Footer con botones de acción */}
@@ -1640,9 +1865,13 @@ export default function PlanningTab({
               <button
                 type="button"
                 onClick={handleSaveBatchTasks}
-                disabled={isSavingBatch || parseTasksFromText(batchText).length === 0}
+                disabled={
+                  isSavingBatch ||
+                  parseTasksFromText(batchText).filter((_, idx) => !excludedBatchIndices.has(idx)).length === 0
+                }
                 className={`px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest text-white flex items-center gap-2 shadow-lg transition-all ${
-                  isSavingBatch || parseTasksFromText(batchText).length === 0
+                  isSavingBatch ||
+                  parseTasksFromText(batchText).filter((_, idx) => !excludedBatchIndices.has(idx)).length === 0
                     ? "bg-gray-300 cursor-not-allowed shadow-none"
                     : "bg-gray-900 hover:bg-black hover:scale-102 active:scale-98 shadow-gray-900/20"
                 }`}
@@ -1654,9 +1883,12 @@ export default function PlanningTab({
                 ) : (
                   <>
                     <Plus size={16} />
-                    {parseTasksFromText(batchText).length > 0
-                      ? `Agregar ${parseTasksFromText(batchText).length} Tareas`
-                      : "Agregar Tareas"}
+                    {(() => {
+                      const count = parseTasksFromText(batchText).filter(
+                        (_, idx) => !excludedBatchIndices.has(idx)
+                      ).length;
+                      return count > 0 ? `Agregar ${count} Tareas` : "Agregar Tareas";
+                    })()}
                   </>
                 )}
               </button>
